@@ -239,7 +239,10 @@ def scale_style(style, matrix):
         and style_dict['stroke-dasharray'] != 'none'
         and style_dict['stroke-dasharray']):
         dasharray = ''
-        for dash in ast.literal_eval(style_dict['stroke-dasharray']):
+        stroke_dasharray = style_dict['stroke-dasharray'].strip(', ')
+        if ' ' not in stroke_dasharray and ',' not in stroke_dasharray:
+            stroke_dasharray = stroke_dasharray+','+stroke_dasharray
+        for dash in ast.literal_eval(stroke_dasharray):
             dasharray += str(float(dash)*scale_factor)+','
         style_dict['stroke-dasharray'] = dasharray[:-1]
     if 'font-size' in style_dict:
@@ -354,8 +357,8 @@ def gridlines(axis, line_list, width, height):
         if (line['max'][axis_type]>=axis['min'][axis_type]
             and line['min'][axis_type]<=axis['min'][axis_type]+length/10
             and line['min'][1-axis_type]==line['max'][1-axis_type]
-            and length < width/2
-            and length < height/2
+            and length < width/20
+            and length < height/20
            ):
             gridline = {}
             gridline['length'] = length
@@ -399,33 +402,34 @@ def get_phrases(root):
     for text in root.iter('{http://www.w3.org/2000/svg}text'):
         if 'transform' in text.attrib:
             matrix = transform2matrix(text.attrib['transform'])
+            if not (matrix[0][1] == 0 and matrix[1][0] == 0):
+                scalerotmatrix = matrix[0:2,0:2]
+                translatematrix = matrix[0:2,2:3]
+                scale_factor = np.sqrt(abs(np.linalg.det(scalerotmatrix)))
+                rotationmatrix = scalerotmatrix/scale_factor
+                rotationmatrix = np.concatenate((rotationmatrix,
+                                                 np.zeros((2, 1))),axis=1)
+                rotationmatrix = np.concatenate((rotationmatrix,
+                                                 np.array([[ 0.,  0.,  1.]])),
+                                                axis=0)
+                translatematrix = np.dot(rotationmatrix[0:2,0:2].transpose(),
+                                                            translatematrix)
+                matrix = np.identity(2)*scale_factor
+                matrix = np.concatenate((matrix,translatematrix), axis=1)
+                matrix = np.concatenate((matrix,np.array([[ 0.,  0.,  1.]])),
+                                                                     axis=0)
+                text.attrib['transform'] = matrix2transform(rotationmatrix)
+            else:
+                del text.attrib['transform']
             for tspan in text:
-                if not (matrix[0][1] == 0 and matrix[1][0] == 0):
-                    scalerotmatrix = matrix[0:2,0:2]
-                    translatematrix = matrix[0:2,2:3]
-                    scale_factor = np.sqrt(abs(np.linalg.det(scalerotmatrix)))
-                    rotationmatrix = scalerotmatrix/scale_factor
-                    rotationmatrix = np.concatenate((rotationmatrix,
-                                                     np.zeros((2, 1))),axis=1)
-                    rotationmatrix = np.concatenate((rotationmatrix,
-                                                     np.array([[ 0.,  0.,  1.]])),
-                                                    axis=0)
-                    translatematrix = np.dot(rotationmatrix[0:2,0:2].transpose(),
-                                                                translatematrix)
-                    matrix = np.identity(2)*scale_factor
-                    matrix = np.concatenate((matrix,translatematrix), axis=1)
-                    matrix = np.concatenate((matrix,np.array([[ 0.,  0.,  1.]])),
-                                                                         axis=0)
-                    text.attrib['transform'] = matrix2transform(rotationmatrix)
-                else:
-                    rotationmatrix = np.array([])
-                    del text.attrib['transform']
                 (x,y)=transform_text(tspan.attrib['x'],tspan.attrib['y'],matrix)
                 x_list = ast.literal_eval('['+x.replace(' ',',')+']')
                 y_list = ast.literal_eval('['+y.replace(' ',',')+']')
                 style = scale_style(tspan.attrib['style'], matrix)
                 style_dict = style2dict(style)
                 text_attr = tspan.text
+                if text_attr == None:
+                    text_attr = ''
                 (size,unit) = font_size2size_units(style_dict['font-size'])
                 for char_zip in zip(text_attr, x_list, y_list):
                     char = {'text':char_zip[0],'x':char_zip[1],'y':char_zip[2],
@@ -495,11 +499,12 @@ def calibrate_grid(axes,phrases,width,height):
                 grid_calibr = []
                 grid_sorted = sorted(axis['grid'], key=itemgetter('length'), reverse=True)
                 for phrase in phrases:
-                    if ((phrase['coords'][1] > axis['min'][1]+phrase['dimensions'][1]
-                        and axis_type == 0)
+                    if ((phrase['coords'][1] > axis['min'][1]+phrase['dimensions'][1]*1.1 # x-axis label
+                         and axis_type == 0)
                         or
                         (phrase['coords'][0]+phrase['dimensions'][0]*1.2 < axis['min'][0] # y-axis label
-                              and axis_type == 1)):
+                         and phrase['coords'][1] < axis['min'][0]
+                         and axis_type == 1)):
                       if 'name' in grids_calibr[axis_type]:
                           grids_calibr[axis_type]['name'] += phrase['text']
                       else:
@@ -509,7 +514,7 @@ def calibrate_grid(axes,phrases,width,height):
                         if (((phrase['coords'][1] > gridline['d'][1]+gridline['length']
                               and phrase['coords'][0] < gridline['d'][0]
                               and phrase['coords'][0]+phrase['dimensions'][0] > gridline['d'][0]
-                              and phrase['coords'][1] < gridline['d'][1]+gridline['length']+phrase['dimensions'][1]
+                              and phrase['coords'][1] < axis['min'][1]+phrase['dimensions'][1]*1.1
                              ) and axis_type == 0)
                             or
                             ((phrase['coords'][0]+phrase['dimensions'][0]*0.7 < gridline['d'][0]
@@ -528,7 +533,11 @@ def calibrate_grid(axes,phrases,width,height):
                                     text = text.replace('}','')
                                     text = text.replace('0^{','E')
                                 gridline['value'] = float(text)
-                                grid_calibr.append(gridline)
+                                for gridtest in grid_calibr:
+                                    if (gridtest['d'] == gridline['d']).all():
+                                        break
+                                else:
+                                    grid_calibr.append(gridline)
                 if grid_calibr:
                     value0 = grid_calibr[0]['value']
                     value1 = grid_calibr[1]['value']
@@ -548,7 +557,7 @@ def calibrate_grid(axes,phrases,width,height):
                             gridline['value'] = np.log(gridline['value'])
                     else:
                         print(grid_calibr)
-                        raise Exception('Did not found axis scaling!')
+                        raise Exception('Did not find axis scaling!')
 
                     grids_calibr[axis_type]['type']=axis_scaling
                     grids_calibr[axis_type]['grid']=grid_calibr
@@ -595,8 +604,9 @@ def get_labels(graphs,lines,phrases):
         graph['label'] = ''
         graph['label_len'] = 0
         for line in lines:
-            if ((line['style'] == graph['style']) and
-                not np.array_equal(line['d'], graph['d'])):
+            if ((line['style'] == graph['style'])
+                and line['min'][1] == line['max'][1]
+                and not np.array_equal(line['d'], graph['d'])):
                 for phrase in phrases:
                     if (phrase['coords'][0] > line['max'][0]
                         and phrase['coords'][0]-phrase['dimensions'][1]*2 < line['max'][0]+graph['label_len']*0.92
