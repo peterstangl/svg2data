@@ -614,20 +614,20 @@ def get_labels(graphs,lines,phrases):
                         and phrase['coords'][1]-phrase['dimensions'][1]*0.7<line['min'][1]):
                         graph['label'] += ' '+phrase['text']
                         graph['label_len'] += phrase['dimensions'][0]
+        graph['label']=graph['label'].strip()
     for graph in graphs:
         doubleline = 0
-        if 'label' not in graph or graph['label']=='':
+        if graph['label']=='':
             for cmp_graph in graphs:
                 if (np.array_equal(cmp_graph['d'], graph['d'])
                     and cmp_graph['style'] != graph['style']
-                    and 'label' in cmp_graph and cmp_graph['label'] != ''):
+                    and cmp_graph['label'] != ''):
                     doubleline = 1
             for cmp_graph in new_graphs:
                 if np.array_equal(cmp_graph['d'], graph['d']):
                     doubleline = 1
         if not doubleline:
-                graph['label']=graph['label'].strip()
-                new_graphs.append(graph)
+            new_graphs.append(graph)
     graphs = new_graphs
     return graphs
 
