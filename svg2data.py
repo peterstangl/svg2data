@@ -37,26 +37,32 @@ class svg2data(object):
         # generate phrases and simplify xml
         (root,phrases) = get_phrases(root)
 
-        # get long lines
-        long_lines = get_long_lines(lines,width,height)
+        # get axes, plot size and lines to delete
+        (axes, axes_min, axes_max, lines) = get_axes(lines,width,height)
 
-        # get axes, graphs and areas
-        (axes,graphs,areas) = get_axes_graphs_areas(long_lines)
+        # get graphs, areas and label_graphs
+        (graphs,areas,label_graphs) = get_graphs_areas(lines, axes, axes_min, axes_max, phrases)
+
+        # connect graphs with the same style
+        graphs = connect_graphs(graphs, axes_min, axes_max)
 
         # calibrate grid
-        self.axes = calibrate_grid(axes,phrases,width,height)
+        grids = calibrate_grid(axes,phrases,width,height)
 
         # calibrate graphs
-        graphs = calibrate_graphs(graphs,self.axes)
+        graphs = calibrate_graphs(graphs,grids)
 
         # get labels for graphs
-        self.graphs = get_labels(graphs,lines,phrases)
+        graphs = get_labels(graphs,label_graphs,grids)
+
+        self.graphs = graphs
+        self.grids = grids
 
     def writesvg(self,filename):
         self._tree.write(filename)
 
     def plot(self):
-        plot_graphs(self.graphs,self.axes)
+        plot_graphs(self.graphs,self.grids)
 
 def transform2matrix(string):
     if 'matrix' in string:
@@ -276,7 +282,13 @@ def font_size2size_units(font_size):
     return [size, unit]
 
 def chars2phrases(chars):
-    chars_sorted = sorted(copy.deepcopy(chars), key=itemgetter('x'), reverse=True)
+    chars_single = []
+    for char in chars:
+        if char in chars_single:
+            next
+        else:
+            chars_single.append(char)
+    chars_sorted = sorted(chars_single, key=itemgetter('x'), reverse=True)
     phrases = []
     while chars_sorted:
         startchar = chars_sorted.pop()
@@ -345,16 +357,16 @@ def chars2phrases(chars):
             del(chars_sorted[i])
     return phrases
 
-def gridlines(axis, line_list, width, height):
+def gridlines(axis, line_list, width, height, lines_to_delete): # edited
     gridlines = []
     if axis['min'][0]==axis['max'][0]:
         axis_type = 0
     elif axis['min'][1]==axis['max'][1]:
         axis_type = 1
-    else: return False
+    else: return [False, lines_to_delete]
     for line in line_list:
         length = line['max'][axis_type]-line['min'][axis_type]
-        if (line['max'][axis_type]>=axis['min'][axis_type]
+        if (line['max'][axis_type]>=axis['min'][axis_type]-length/10
             and line['min'][axis_type]<=axis['min'][axis_type]+length/10
             and line['min'][1-axis_type]==line['max'][1-axis_type]
             and length < width/20
@@ -364,7 +376,8 @@ def gridlines(axis, line_list, width, height):
             gridline['length'] = length
             gridline['d'] = line['min']
             gridlines.append(gridline)
-    return gridlines
+            lines_to_delete.append(line)
+    return [gridlines, lines_to_delete]
 
 def get_lines(root):
     lines = []
@@ -441,51 +454,165 @@ def get_phrases(root):
     phrases = chars2phrases(chars)
     return [root,phrases]
 
-def get_long_lines(lines,width,height):
-    lhls = []
-    lvls = []
-    for line in lines:
-        if line['max'][0]-line['min'][0] > width/2:
-            grid = gridlines(line, lines, width, height)
-            if grid:
-                line['grid']=grid
-            lhls.append(line)
-        elif line['max'][1]-line['min'][1] > height/2:
-            grid = gridlines(line, lines, width, height)
-            if grid:
-                line['grid']=grid
-            lvls.append(line)
-    return [lhls,lvls]
-
-def get_axes_graphs_areas(long_lines):
+def get_axes(lines,width,height):
     axes = [[],[]]
+    lines_to_delete = []
+    for line in lines:
+        if line['max'][0]-line['min'][0] > width/3:
+            (grid, lines_to_delete) = gridlines(line, lines, width, height, lines_to_delete)
+            if grid:
+                line['grid']=grid
+                axes[0].append(line)
+                lines_to_delete.append(line)
+        elif line['max'][1]-line['min'][1] > height/3:
+            (grid, lines_to_delete) = gridlines(line, lines, width, height, lines_to_delete)
+            if grid:
+                line['grid']=grid
+                axes[1].append(line)
+                lines_to_delete.append(line)
+    axes_min = np.array([axes[0][0]['min'][0],axes[1][0]['min'][1]])
+    axes_max = np.array([axes[0][0]['max'][0],axes[1][0]['max'][1]])
+    new_lines = []
+    for line in lines:
+        if ((line['max']-.1 <= axes_max).all() and (line['min']+.1 >= axes_min).all()):
+            delete = False
+            for line_to_delete in lines_to_delete:
+                if line is line_to_delete:
+                    delete = True
+                    break
+            if not delete:
+                new_lines.append(line)
+    lines = new_lines
+    return [axes, axes_min, axes_max, lines]
+
+def get_graphs_areas(lines, axes, axes_min, axes_max, phrases): # delete boundaries of areas with atol=0.02
+    plot_size = axes_max-axes_min
+    plot_width = plot_size[0]
+    plot_height = plot_size[1]
     areas = []
     mesh = []
     graphs_prel = []
     graphs = []
-    for axis_type in range(2):
-        for long_line in long_lines[axis_type]:
-            if 'grid' in long_line:
-                axes[axis_type].append(long_line)
-            elif ((long_line['style']['fill'] and long_line['style']['fill'] != 'none')
-                  or (long_line['d'][0] == long_line['d'][-1]).all()):
-                areas.append(long_line)
-            elif (long_line['max'][1-axis_type] == long_line['min'][1-axis_type]
-                 and long_line['style']['stroke-dasharray']
-                 and long_line['style']['stroke-dasharray'] != 'none'):
-                mesh.append(long_line)
-            elif axis_type == 0:
-                graphs_prel.append(long_line)
+    label_graphs = []
+    for line in lines:
+        if (
+            (   line['style']['fill']
+            and
+                line['style']['fill'] != 'none')
+        or
+            (line['d'][0] == line['d'][-1]).all()
+        ):
+            areas.append(line)
+        elif (
+            line['max'][1] == line['min'][1]
+        or
+            line['max'][0] == line['min'][0]
+        ):
+            if (
+                'stroke-dasharray' in line['style']
+            and
+                line['style']['stroke-dasharray']
+            and
+                line['style']['stroke-dasharray'] != 'none'
+            and
+                (   line['max'][0]-line['min'][0] > plot_width/2
+                or
+                    line['max'][1]-line['min'][1] > plot_height/2)
+            ):
+                mesh.append(line)
+            else:
+                graphs_prel.append(line)
+        else:
+            graphs_prel.append(line)
     for graph_prel in graphs_prel:
         boundary = 0
-        if graph_prel['max'][1] == graph_prel['min'][1]:
+        if graph_prel['style']['stroke'] == 'none':
+            boundary = 1
+        elif graph_prel['min'][0] == graph_prel['max'][0]:
+            boundary = 1 # vertical line is no graph
+        elif graph_prel['max'][1] == graph_prel['min'][1]:
             for axis in axes[1]:
                 if (axis['min'][1]+float(graph_prel['style']['stroke-width'])+2
                     > graph_prel['max'][1]):
                     boundary = 1
+            arr1 = array_d_sort_x(graph_prel['d'])
+            for area in areas:
+                arr2 = array_d_sort_x(area['d'])
+                if array_d_contained(arr1, arr2, atol=0.002):
+                    boundary = 1
+            graph_prel['label'] = ''
+            graph_prel['label_len'] = 0
+            graph_prel = get_line_label(graph_prel, graph_prel, phrases)
+            if graph_prel['label_len'] > 0:
+                label_graphs.append(graph_prel)
+                boundary = 1
         if boundary == 0:
             graphs.append(graph_prel)
-    return [axes,graphs,areas]
+    return [graphs,areas,label_graphs]
+
+def connect_graphs(graphs, axes_min, axes_max):
+    to_delete = []
+    plot_size = axes_max-axes_min
+    graphs = sorted(graphs, key=lambda k: (k['min'][0]))
+    connections = [{},{}]
+    for i in range(len(graphs)):
+        connections[0][i]={'id':i,'delta':float("inf")}
+        connections[1][i]={'id':i,'delta':float("inf")}
+        length_i = graphs[i]['d'][1]-graphs[i]['d'][0]
+        slope_i = length_i[1]/length_i[0]
+        for j in range(i+1, len(graphs)):
+            length_j = graphs[j]['d'][1]-graphs[j]['d'][0]
+            slope_j = length_j[1]/length_j[0]
+            if (
+                graphs[i]['style'] == graphs[j]['style']
+            and
+                len(graphs[i]['d']) == 2
+            and
+                len(graphs[j]['d']) == 2
+            and
+                abs(slope_i - slope_j) < 0.1
+            and
+                abs(slope_i) > 0.1
+            ):
+                to_delete.append(i)
+                to_delete.append(j)
+    for i in range(len(graphs)):
+        for j in range(i+1, len(graphs)):
+            if (
+                graphs[i]['style'] == graphs[j]['style']
+            and
+                graphs[i]['max'][0] <= graphs[j]['min'][0]+0.001
+            and
+                i not in to_delete
+            and
+                j not in to_delete
+            ):
+                delta = graphs[j]['min'][0] - graphs[i]['max'][0]
+                if connections[0][i]['delta'] > delta:
+                    connections[0][i]['delta'] = delta
+                    connections[0][i]['id'] = j
+                if connections[1][j]['delta'] > delta:
+                    connections[1][j]['delta'] = delta
+                    connections[1][j]['id'] = i
+
+    for key, value in connections[0].items():
+        if (
+            value['id'] != key
+        and
+            connections[1][value['id']]['id'] == key
+        ):
+            graphs[value['id']]['d'] = np.concatenate((graphs[key]['d'], graphs[value['id']]['d']))
+            graphs[value['id']]['max'][1] = max(graphs[value['id']]['max'][1], graphs[key]['max'][1])
+            graphs[value['id']]['min'][0] = graphs[key]['min'][0]
+            graphs[value['id']]['min'][1] = min(graphs[value['id']]['min'][1], graphs[key]['min'][1])
+            graphs[value['id']]['connected'] = True
+            to_delete.append(key)
+    new_graphs = []
+    for i in range(len(graphs)):
+        graph_size = (graphs[i]['max'] - graphs[i]['min'])
+        if ((graph_size > plot_size/9.5).any() and not i in to_delete):
+            new_graphs.append(graphs[i])
+    return new_graphs
 
 def calibrate_grid(axes,phrases,width,height):
     grids_calibr = [{},{}]
@@ -523,12 +650,12 @@ def calibrate_grid(axes,phrases,width,height):
                               and phrase['coords'][0] > gridline['d'][0]-phrase['dimensions'][0]*1.5
                              ) and axis_type == 1)
                             ):
-                            if (grid_calibr and gridline['length'] < grid_calibr[-1]['length']
-                                and len(grid_calibr) >=3):
+                            if (grid_calibr and gridline['length'] < grid_calibr[-1]['length']):
                                 break
                             else:
                                 gridline['text'] = phrase['text']
                                 text = gridline['text'];
+                                text = text.replace('−','-')
                                 if '^' in text:
                                     text = text.replace('}','')
                                     text = text.replace('0^{','E')
@@ -538,7 +665,38 @@ def calibrate_grid(axes,phrases,width,height):
                                         break
                                 else:
                                     grid_calibr.append(gridline)
-                if grid_calibr:
+                if (grid_calibr and len(grid_calibr) == 1):
+                    grid = sorted(axis['grid'], key=lambda k: (k['d'][axis_type]))
+                    for i in range(len(grid)):
+                        if (i>0 and grid[i]['length']>grid[i-1]['length']):
+                            v0 = grid[i]['value']
+                            x0 = grid[i]['d'][axis_type]
+                            v1 = v0*2
+                            x1 = grid[i-1]['d'][axis_type]
+                            break
+                        elif (i<len(grid)-1 and grid[i]['length']>grid[i+1]['length']):
+                            v0 = grid[i]['value']
+                            x0 = grid[i]['d'][axis_type]
+                            v1 = v0*0.9
+                            x1 = grid[i+1]['d'][axis_type]
+                            break
+                    a = (x0-x1)/(np.log(v0)-np.log(v1))
+                    b = (x1*np.log(v0)-x0*np.log(v1))/(np.log(v0)-np.log(v1))
+                    x0 = grid[0]['d'][axis_type]
+                    x1 = grid[1]['d'][axis_type]
+                    x2 = grid[2]['d'][axis_type]
+                    v0 = np.exp((x0-b)/a)
+                    v1 = np.exp((x1-b)/a)
+                    v2 = np.exp((x2-b)/a)
+                    if (v0-v1)/(v1-v2)-1 < 0.001 :
+                        for i in range(len(grid)):
+                            x = grid[i]['d'][axis_type]
+                            v = np.exp((x-b)/a)
+                            grid[i]['value'] = v
+                        grid_calibr = grid
+                    else:
+                        raise Exception('Only one number on axis and no logscale found!')
+                if (grid_calibr and len(grid_calibr) >= 3):
                     value0 = grid_calibr[0]['value']
                     value1 = grid_calibr[1]['value']
                     value2 = grid_calibr[2]['value']
@@ -558,9 +716,19 @@ def calibrate_grid(axes,phrases,width,height):
                     else:
                         print(grid_calibr)
                         raise Exception('Did not find axis scaling!')
-
-                    grids_calibr[axis_type]['type']=axis_scaling
-                    grids_calibr[axis_type]['grid']=grid_calibr
+                elif (grid_calibr and len(grid_calibr) >= 2):
+                    value0 = grid_calibr[0]['value']
+                    value1 = grid_calibr[1]['value']
+                    if (value0/value1 == 10 or value0/value1 == 1/10):
+                        axis_scaling = 'log'
+                        for gridline in grid_calibr:
+                            gridline['value'] = np.log(gridline['value'])
+                    else:
+                        axis_scaling = 'linear'
+                else:
+                    raise Exception('no grid found!')
+                grids_calibr[axis_type]['type']=axis_scaling
+                grids_calibr[axis_type]['grid']=grid_calibr
     return grids_calibr
 
 def get_calibr_matrix(grids_calibr):
@@ -598,34 +766,103 @@ def calibrate_graphs(graphs,grids_calibr):
         graph['values'] = path_calib
     return graphs
 
-def get_labels(graphs,lines,phrases):
+def array_d_sort_x(array):
+    ind = np.argsort(array[:,0])
+    return array[ind]
+
+def array_d_contained(array1, array2, rtol=0, atol=0):
+    i1 = 0
+    i2 = 0
+    match = 0
+    if rtol == 0 and atol == 0:
+        cmp_func = np.array_equal
+    else:
+        def cmp_func(arr1,arr2):
+            return np.allclose(arr1,arr2,rtol,atol)
+    while (i1 < len(array1) and i2 < len(array2)):
+        if cmp_func(array1[i1],array2[i2]):
+            i1 = i1+1
+            i2 = i2+1
+            match = match+1
+        elif array1[i1][0] >= array2[i2][0] -atol-rtol*abs(array2[i2][0]):
+            i2 = i2+1
+        else:
+            return False
+        if match == len(array1):
+            return True
+    return False
+
+def get_line_label(line, graph, phrases):
+    for phrase in phrases:
+        if (phrase['coords'][0] > line['max'][0]
+            and phrase['coords'][0]-phrase['dimensions'][1]*2 < line['max'][0]+graph['label_len']*0.92
+            and phrase['coords'][1]>line['min'][1]
+            and phrase['coords'][1]-phrase['dimensions'][1]*0.7<line['min'][1]):
+            graph['label'] += ' '+phrase['text']
+            graph['label_len'] += phrase['dimensions'][0]
+    graph['label']=graph['label'].strip()
+    return graph
+
+def get_labels(graphs,lines,axes):
     new_graphs = []
+    gridline = axes[1]['grid'][0]
+    label_min_x = gridline['d'][0] + gridline['length']
     for graph in graphs:
         graph['label'] = ''
-        graph['label_len'] = 0
         for line in lines:
-            if ((line['style'] == graph['style'])
+            if (line['style'] == graph['style']
                 and line['min'][1] == line['max'][1]
-                and not np.array_equal(line['d'], graph['d'])):
-                for phrase in phrases:
-                    if (phrase['coords'][0] > line['max'][0]
-                        and phrase['coords'][0]-phrase['dimensions'][1]*2 < line['max'][0]+graph['label_len']*0.92
-                        and phrase['coords'][1]>line['min'][1]
-                        and phrase['coords'][1]-phrase['dimensions'][1]*0.7<line['min'][1]):
-                        graph['label'] += ' '+phrase['text']
-                        graph['label_len'] += phrase['dimensions'][0]
-        graph['label']=graph['label'].strip()
+                and not np.array_equal(line['d'], graph['d'])
+                and line['min'][0]>label_min_x):
+                graph['label'] =  line['label']
+                graph['label_len'] = line['label_len']
     for graph in graphs:
         doubleline = 0
-        if graph['label']=='':
+        if graph['label']=='' or 'connected' in graph:
             for cmp_graph in graphs:
-                if (np.array_equal(cmp_graph['d'], graph['d'])
-                    and cmp_graph['style'] != graph['style']
-                    and cmp_graph['label'] != ''):
+                if (
+                    (    (   array_d_contained(cmp_graph['d'], graph['d'])
+                        or
+                            array_d_contained(graph['d'], cmp_graph['d']))
+                    and
+                        cmp_graph['style'] != graph['style']
+                    and
+                        cmp_graph['label'] != '')
+                or
+                    (   'connected' in graph
+                    and
+                        'connected' not in cmp_graph
+                    and
+                        cmp_graph['label'] == graph['label']
+                    and
+                        graph['label'] != ''
+                    )
+                ):
                     doubleline = 1
             for cmp_graph in new_graphs:
                 if np.array_equal(cmp_graph['d'], graph['d']):
                     doubleline = 1
+            if doubleline == 0:
+                for line in lines:
+                    if (    line['style']['stroke'] == graph['style']['stroke']
+                        and (   (   line['style']['stroke-dasharray'] != 'none'
+                                and line['style']['stroke-dasharray'] != ''
+                                and graph['style']['stroke-dasharray'] != 'none'
+                                and graph['style']['stroke-dasharray'] != '')
+                            or (    line['style']['stroke-dasharray'] == 'none'
+                                and graph['style']['stroke-dasharray'] == 'none'))
+                        and line['min'][1] == line['max'][1]
+                        and not np.array_equal(line['d'], graph['d'])
+                        and line['min'][0]>label_min_x):
+                            stop = 0
+                            for cmp_graph in graphs:
+                                if (    cmp_graph['label'] == line['label']
+                                    and cmp_graph['style'] == line['style']):
+                                    stop = 1
+                            if not stop:
+                                graph['label'] =  line['label']
+                                graph['label_len'] = line['label_len']
+                graph['label']=graph['label'].strip()
         if not doubleline:
             new_graphs.append(graph)
     graphs = new_graphs
