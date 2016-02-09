@@ -811,59 +811,71 @@ def get_labels(graphs,lines,axes):
         graph['label'] = ''
         for line in lines:
             if (line['style'] == graph['style']
-                and line['min'][1] == line['max'][1]
-                and not np.array_equal(line['d'], graph['d'])
-                and line['min'][0]>label_min_x):
+            and line['min'][1] == line['max'][1]
+            and not np.array_equal(line['d'], graph['d'])
+            and line['min'][0]>label_min_x):
                 graph['label'] =  line['label']
                 graph['label_len'] = line['label_len']
     for graph in graphs:
-        doubleline = 0
+        graph['overlap'] = []
+        graph['doubleline'] = False
         if graph['label']=='' or 'connected' in graph:
-            for cmp_graph in graphs:
-                if (
-                    (    (   array_d_contained(cmp_graph['d'], graph['d'])
-                        or
-                            array_d_contained(graph['d'], cmp_graph['d']))
-                    and
-                        cmp_graph['style'] != graph['style']
-                    and
-                        cmp_graph['label'] != '')
-                or
-                    (   'connected' in graph
-                    and
-                        'connected' not in cmp_graph
-                    and
-                        cmp_graph['label'] == graph['label']
-                    and
-                        graph['label'] != ''
-                    )
+            for j in range(len(graphs)):
+                cmp_graph = graphs[j]
+                if 'overlap' not in cmp_graph:
+                    cmp_graph['overlap'] = []
+                if (((array_d_contained(cmp_graph['d'], graph['d'])
+                        or array_d_contained(graph['d'], cmp_graph['d']))
+                    and cmp_graph['style'] != graph['style']
+                    and cmp_graph['label'] != '')
+                or ('connected' in graph
+                    and 'connected' not in cmp_graph
+                    and cmp_graph['label'] == graph['label']
+                    and graph['label'] != '')
                 ):
-                    doubleline = 1
-            for cmp_graph in new_graphs:
-                if np.array_equal(cmp_graph['d'], graph['d']):
-                    doubleline = 1
-            if doubleline == 0:
+                    graph['doubleline'] = True
+                    graph['overlap'].append(j)
+    for graph in graphs:
+        if ('overlap' in graph
+        and graph['doubleline']
+        and graph['label'] != ''):
+            for overlap in graph['overlap']:
+                for cmp_graph in graphs:
+                    if (cmp_graph['label'] == graphs[overlap]['label']
+                    and graphs[overlap]['label'] != graph['label']
+                    and not np.array_equal(cmp_graph['d'], graphs[overlap]['d'])
+                    and 'overlap' in cmp_graph
+                    and overlap in cmp_graph['overlap']):
+                        graph['doubleline'] = False
+                        graphs[overlap]['doubleline'] = True
+                        cmp_graph['doubleline'] = False
+    for graph in graphs:
+        if graph['label']=='' or 'connected' in graph:
+            #for cmp_graph in new_graphs:
+            #    if np.array_equal(cmp_graph['d'], graph['d']):
+            #        graph['doubleline'] = True
+            if not graph['doubleline']:
                 for line in lines:
-                    if (    line['style']['stroke'] == graph['style']['stroke']
-                        and (   (   line['style']['stroke-dasharray'] != 'none'
-                                and line['style']['stroke-dasharray'] != ''
-                                and graph['style']['stroke-dasharray'] != 'none'
-                                and graph['style']['stroke-dasharray'] != '')
-                            or (    line['style']['stroke-dasharray'] == 'none'
-                                and graph['style']['stroke-dasharray'] == 'none'))
-                        and line['min'][1] == line['max'][1]
-                        and not np.array_equal(line['d'], graph['d'])
-                        and line['min'][0]>label_min_x):
-                            stop = 0
-                            for cmp_graph in graphs:
-                                if (    cmp_graph['label'] == line['label']
-                                    and cmp_graph['style'] == line['style']):
-                                    stop = 1
-                            if not stop:
-                                graph['label'] =  line['label']
-                                graph['label_len'] = line['label_len']
+                    if (line['style']['stroke'] == graph['style']['stroke']
+                    and ((line['style']['stroke-dasharray'] != 'none'
+                        and line['style']['stroke-dasharray'] != ''
+                        and graph['style']['stroke-dasharray'] != 'none'
+                        and graph['style']['stroke-dasharray'] != '')
+                        or (line['style']['stroke-dasharray'] == 'none'
+                            and graph['style']['stroke-dasharray'] == 'none'))
+                    and line['min'][1] == line['max'][1]
+                    and not np.array_equal(line['d'], graph['d'])
+                    and line['min'][0]>label_min_x):
+                        stop = 0
+                        for cmp_graph in graphs:
+                            if (cmp_graph['label'] == line['label']
+                            and cmp_graph['style'] == line['style']):
+                                stop = 1
+                        if not stop:
+                            graph['label'] =  line['label']
+                            graph['label_len'] = line['label_len']
                 graph['label']=graph['label'].strip()
-        if not doubleline:
+        if not graph['doubleline']:
             new_graphs.append(graph)
     graphs = new_graphs
     return graphs
