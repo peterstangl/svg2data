@@ -53,7 +53,7 @@ class svg2data(object):
         graphs = calibrate_graphs(graphs,grids)
 
         # get labels for graphs
-        graphs = get_labels(graphs,label_graphs,grids)
+        graphs = get_labels(graphs,label_graphs,grids,areas)
 
         self.graphs = graphs
         self.grids = grids
@@ -803,38 +803,87 @@ def get_line_label(line, graph, phrases):
     graph['label']=graph['label'].strip()
     return graph
 
-def get_labels(graphs,lines,axes):
+def get_labels(graphs,lines,axes,areas):
     new_graphs = []
     gridline = axes[1]['grid'][0]
     label_min_x = gridline['d'][0] + gridline['length']
+    assigned_label = []
     for graph in graphs:
         graph['label'] = ''
-        for line in lines:
+        for i in range(len(lines)):
+            line = lines[i]
             if (line['style'] == graph['style']
             and line['min'][1] == line['max'][1]
             and not np.array_equal(line['d'], graph['d'])
             and line['min'][0]>label_min_x):
                 graph['label'] =  line['label']
                 graph['label_len'] = line['label_len']
+                assigned_label.append(i)
     for graph in graphs:
         graph['overlap'] = []
         graph['doubleline'] = False
-        if graph['label']=='' or 'connected' in graph:
-            for j in range(len(graphs)):
-                cmp_graph = graphs[j]
-                if 'overlap' not in cmp_graph:
-                    cmp_graph['overlap'] = []
-                if (((array_d_contained(cmp_graph['d'], graph['d'])
-                        or array_d_contained(graph['d'], cmp_graph['d']))
-                    and cmp_graph['style'] != graph['style']
-                    and cmp_graph['label'] != '')
-                or ('connected' in graph
-                    and 'connected' not in cmp_graph
-                    and cmp_graph['label'] == graph['label']
-                    and graph['label'] != '')
-                ):
-                    graph['doubleline'] = True
-                    graph['overlap'].append(j)
+        for j in range(len(graphs)):
+            cmp_graph = graphs[j]
+            if 'overlap' not in cmp_graph:
+                cmp_graph['overlap'] = []
+            if (((array_d_contained(cmp_graph['d'], graph['d'])
+                    or array_d_contained(graph['d'], cmp_graph['d']))
+                and cmp_graph['style'] != graph['style']
+                and cmp_graph['label'] != ''
+                and (graph['label']=='' or 'connected' in graph))
+            or ('connected' in graph
+                and 'connected' not in cmp_graph
+                and cmp_graph['label'] == graph['label']
+                and graph['label'] != '')
+            ):
+                graph['doubleline'] = True
+                graph['overlap'].append(j)
+            if (graph['label'] == cmp_graph['label']
+            and graph['style'] == cmp_graph['style']
+            and not np.array_equal(graph['d'], cmp_graph['d'])):
+                for i in range(len(lines)):
+                    if (i not in assigned_label
+                    and line['min'][1] == line['max'][1]
+                    and line['min'][0]>label_min_x):
+                        if 'areas' not in line:
+                            line['areas'] = []
+                        for j in range(len(areas)):
+                            area = areas[j]
+                            if (area['min'][0] == line['min'][0]
+                            and area['max'][0] == line['max'][0]
+                            and area['min'][1] <= line['min'][1]
+                            and area['max'][1] >= line['min'][1]):
+                                if j not in line['areas']:
+                                    line['areas'].append(j)
+                            elif (area['min'][0] == graph['min'][0]
+                            and area['max'][0] == graph['max'][0]
+                            and area['min'][1] <= graph['min'][1]
+                            and area['max'][1] >= graph['min'][1]):
+                                if 'areas' not in graph:
+                                    graph['areas'] = []
+                                if j not in graph['areas']:
+                                    graph['areas'].append(j)
+                            elif (area['min'][0] == cmp_graph['min'][0]
+                            and area['max'][0] == cmp_graph['max'][0]
+                            and area['min'][1] <= cmp_graph['min'][1]
+                            and area['max'][1] >= cmp_graph['min'][1]):
+                                if 'areas' not in cmp_graph:
+                                    cmp_graph['areas'] = []
+                                if j not in graph['areas']:
+                                    cmp_graph['areas'].append(j)
+                        for label_area in line['areas']:
+                            if 'areas' in graph:
+                                for graph_area in graph['areas']:
+                                    if (areas[label_area]['style']
+                                    == areas[graph_area]['style']):
+                                        graph['label'] =  line['label']
+                                        graph['label_len'] = line['label_len']
+                            elif 'areas' in cmp_graph:
+                                for cmp_graph_area in cmp_graph['areas']:
+                                    if (areas[label_area]['stlye']
+                                    == areas[cmp_graph_area]['stlye']):
+                                        cmp_graph['label'] =  line['label']
+                                        cmp_graph['label_len'] = line['label_len']
     for graph in graphs:
         if ('overlap' in graph
         and graph['doubleline']
