@@ -6,7 +6,7 @@ import copy
 import pylab as plb
 
 class svg2data(object):
-    def __init__(self, filename):
+    def __init__(self, filename, test=False):
         restart = 1
         reason = ''
         while restart:
@@ -33,6 +33,8 @@ class svg2data(object):
                     else:
                         raise Exception('Not able to repair damaged SVG file!')
                     break
+        if not restart and reason == 'neg_vals' and not test:
+            self._tree.write(filename[:-4]+'_repaired.svg')
 
         # generate phrases and simplify xml
         (root,phrases) = get_phrases(root)
