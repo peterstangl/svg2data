@@ -23,7 +23,7 @@ class svg2data(object):
                 child = pass_transformation(child)
 
             # generate line list and simplify xml
-            (root,lines) = get_lines(root)
+            (root,lines,curves) = get_lines_curves(root)
 
             for line in lines:
                 if (line['min']/width<-0.01).any():
@@ -59,6 +59,7 @@ class svg2data(object):
 
         self.graphs = graphs
         self.grids = grids
+        self.curves = curves
 
     def writesvg(self,filename):
         self._tree.write(filename)
@@ -162,32 +163,47 @@ def parse_path(path_data):
     if entity:
         yield entity
 
-def path_to_lines_and_curves(path_data): # at the moment curves are ignored
+def path_to_lines_and_curves(path_data): # SsQqTtAa is ignored
     path = parse_path(path_data)
-    drawto_command = 'MmZzLlHhVvCcSsQqTtAa'
-    curve_command = 'CcSsQqTtAa'
+    drawto_commands = 'MmZzLlHhVvCcSsQqTtAa'
+    line_commands = 'LlHhVv'
     command = None
-    lines_and_curves = []
+    lines = []
     line = []
+    curves = []
+    curve = []
     coordinate = []
     base_coordinate = [0,0]
     xy = 0
     for entry in path:
-        if entry in drawto_command:
+        if entry in drawto_commands:
             command  = entry
             absolute = entry.isupper()
             if command in 'Mm':
-                if absolute:
-                    command = 'L'
-                else:
-                    command = 'l'
                 if line:
-                    lines_and_curves.append(np.array(line))
+                    lines.append(np.array(line))
                     line = []
-            elif command in 'Zz' and line[0] != line[-1]:
-                base_coordinate = line[0]
-                line.append(line[0])
-        elif command not in curve_command:
+                elif curve:
+                    curves.append(np.array(curve))
+                    curve = []
+            elif command in 'Zz':
+                if line and line[0] != line[-1]:
+                    base_coordinate = line[0]
+                    line.append(line[0])
+                elif curve and curve[0] != curve[-1]:
+                    base_coordinate = curve[0]
+                    curve.append(curve[0])
+            elif command in line_commands and curve:
+                    curves.append(np.array(curve))
+                    curve = []
+            elif command in 'Cc' and line:
+                if len(line)==1:
+                    curve = line
+                    line = []
+                else:
+                    lines.append(np.array(line))
+                    line = []
+        else:
             if not absolute:
                 entry = base_coordinate[xy]+float(entry)
             else:
@@ -195,26 +211,50 @@ def path_to_lines_and_curves(path_data): # at the moment curves are ignored
             if not xy and command not in 'HhVv':
                 coordinate = [entry]
                 xy = 1
+            elif command in 'Hh':
+                coordinate = [entry, base_coordinate[1]]
+            elif command in 'Vv':
+                coordinate = [base_coordinate[0], entry]
             else:
-                if command in 'Hh':
-                    coordinate = [entry, base_coordinate[1]]
-                elif command in 'Vv':
-                    coordinate = [base_coordinate[0], entry]
-                else:
-                    coordinate.append(entry)
-                base_coordinate = coordinate
-                line.append(coordinate)
+                coordinate.append(entry)
+            if len(coordinate) == 2:
                 xy = 0
-    lines_and_curves.append(np.array(line))
-    return lines_and_curves
+                if (command in line_commands
+                or command in 'Mm'):
+                    base_coordinate = coordinate
+                    line.append(coordinate)
+                    if command in 'Mm':
+                        if absolute:
+                            command = 'L'
+                        else:
+                            command = 'l'
+                elif command in 'Cc':
+                    if len(curve) % 3 == 0:
+                        base_coordinate = coordinate
+                    curve.append(coordinate)
+    if line:
+        lines.append(np.array(line))
+    if curve:
+        curves.append(np.array(curve))
+    return (lines,curves)
 
-def lines_and_curves_to_path(lines_and_curves): # at the moment curves are ignored
+def lines_and_curves_to_path(lines,curves): # SsQqTtAa is ignored
     line_string = ''
-    for line in lines_and_curves:
+    for line in lines:
         if line_string:
             line_string += ' '
         line_string += 'M'
         for coordinate in line.flatten():
+            line_string += ' '+str(coordinate)
+    for curve in curves:
+        if line_string:
+            line_string += ' '
+        line_string += 'M'
+        coordinates = curve.flatten()
+        for i in range(len(coordinates)):
+            coordinate = coordinates[i]
+            if i == 2:
+                line_string += ' C'
             line_string += ' '+str(coordinate)
     return line_string
 
@@ -381,25 +421,31 @@ def gridlines(axis, line_list, width, height, lines_to_delete): # edited
             lines_to_delete.append(line)
     return [gridlines, lines_to_delete]
 
-def get_lines(root):
+def get_lines_curves(root):
     lines = []
+    curves = []
     paths = []
     for path in reversed(list(root.iter('{http://www.w3.org/2000/svg}path'))):
         if 'transform' in path.attrib:
             matrix = transform2matrix(path.attrib['transform'])
             line_list = []
+            curve_list = []
             # transform path coordiantes
-            for line in path_to_lines_and_curves(path.attrib['d']):
+            lines_and_curves = path_to_lines_and_curves(path.attrib['d'])
+            for line in lines_and_curves[0]:
                 line_list.append(transform_path(line, matrix))
+            for curve in lines_and_curves[1]:
+                curve_list.append(transform_path(curve, matrix))
             # transform path style
             style = scale_style(path.attrib['style'], matrix)
             del path.attrib['transform']
         else:
-            line_list = path_to_lines_and_curves(path.attrib['d'])
+            lines_and_curves = path_to_lines_and_curves(path.attrib['d'])
+            (line_list,curve_list) = lines_and_curves
             if 'style' in path.attrib:
                 style = path.attrib['style']
         path.attrib['style'] = style
-        path.attrib['d'] = lines_and_curves_to_path(line_list)
+        path.attrib['d'] = lines_and_curves_to_path(line_list,curve_list)
         if path.attrib not in paths:
             paths.append(path.attrib)
             # extract only information needed for data extraction
@@ -408,9 +454,14 @@ def get_lines(root):
                 min_values = np.amin(line, axis=0)
                 line_dict = {'d':line, 'style':style2dict(style), 'max':max_values, 'min':min_values}
                 lines.append(line_dict)
+            for curve in curve_list:
+                max_values = np.amax(curve, axis=0)
+                min_values = np.amin(curve, axis=0)
+                curve_dict = {'d':curve,  'style':style2dict(style), 'max':max_values, 'min':min_values}
+                curves.append(curve_dict)
         else:
             path.clear()
-    return(root,lines)
+    return(root,lines,curves)
 
 def get_phrases(root):
     chars = []
