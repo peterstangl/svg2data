@@ -42,8 +42,10 @@ class svg2data(object):
         # get axes, plot size and lines to delete
         (axes, axes_min, axes_max, lines) = get_axes(lines,width,height)
 
-        # get graphs, areas and label_graphs
+        # get graphs, areas and labels
         (graphs,areas,label_graphs) = get_graphs_areas(lines, axes, axes_min, axes_max, phrases)
+        for curve in curves:
+            curve = get_line_label(curve, phrases)
 
         # connect graphs with the same style
         graphs = connect_graphs(graphs, axes_min, axes_max)
@@ -593,9 +595,7 @@ def get_graphs_areas(lines, axes, axes_min, axes_max, phrases): # delete boundar
                 arr2 = array_d_sort_x(area['d'])
                 if array_d_contained(arr1, arr2, atol=0.002):
                     boundary = 1
-            graph_prel['label'] = ''
-            graph_prel['label_len'] = 0
-            graph_prel = get_line_label(graph_prel, graph_prel, phrases)
+            graph_prel = get_line_label(graph_prel, phrases)
             if graph_prel['label_len'] > 0:
                 label_graphs.append(graph_prel)
                 boundary = 1
@@ -845,16 +845,25 @@ def array_d_contained(array1, array2, rtol=0, atol=0):
             return True
     return False
 
-def get_line_label(line, graph, phrases):
+def get_line_label(line, phrases):
+    line['label'] = ''
+    line['label_len'] = 0
+    line['label_start'] = line['max'][0]
     for phrase in phrases:
+        if line['label_start'] == line['max'][0]:
+            label_start = line['label_start'] + phrase['dimensions'][1]*5
+        else:
+            label_start = line['label_start']
         if (phrase['coords'][0] > line['max'][0]
-            and phrase['coords'][0]-phrase['dimensions'][1]*2 < line['max'][0]+graph['label_len']*0.92
-            and phrase['coords'][1]>line['min'][1]
-            and phrase['coords'][1]-phrase['dimensions'][1]*0.7<line['min'][1]):
-            graph['label'] += ' '+phrase['text']
-            graph['label_len'] += phrase['dimensions'][0]
-    graph['label']=graph['label'].strip()
-    return graph
+        and phrase['coords'][0]-phrase['dimensions'][1]*2 < label_start+line['label_len']*0.92
+        and phrase['coords'][1]>line['min'][1]
+        and phrase['coords'][1]-phrase['dimensions'][1]*0.7<line['max'][1]):
+            line['label'] += ' '+phrase['text']
+            if line['label_start'] == line['max'][0]:
+                line['label_start'] = phrase['coords'][0]
+            line['label_len'] += phrase['dimensions'][0]
+    line['label']=line['label'].strip()
+    return line
 
 def get_labels(graphs,lines,axes,areas):
     new_graphs = []
