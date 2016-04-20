@@ -44,8 +44,9 @@ class svg2data(object):
 
         # get graphs, areas and labels
         (graphs,areas,label_graphs) = get_graphs_areas(lines, axes, axes_min, axes_max, phrases)
-        for curve in curves:
-            curve = get_line_label(curve, phrases)
+
+        #get bulletlines and labels
+        bullet_lines, bullet_labels = get_bullets(curves,phrases)
 
         # connect graphs with the same style
         graphs = connect_graphs(graphs, axes_min, axes_max)
@@ -57,11 +58,10 @@ class svg2data(object):
         graphs = calibrate_graphs(graphs,grids)
 
         # get labels for graphs
-        graphs = get_labels(graphs,label_graphs,grids,areas)
+        graphs = get_labels(graphs,label_graphs,bullet_lines,bullet_labels,grids,areas)
 
         self.graphs = graphs
         self.grids = grids
-        self.curves = curves
 
     def writesvg(self,filename):
         self._tree.write(filename)
@@ -603,6 +603,24 @@ def get_graphs_areas(lines, axes, axes_min, axes_max, phrases): # delete boundar
             graphs.append(graph_prel)
     return [graphs,areas,label_graphs]
 
+def get_bullets(curves,phrases):
+    bullet_lines = {}
+    bullet_labels = {}
+    for curve in curves:
+        if (len(curve['d']) == 7
+        and all(curve['d'][0] == curve['d'][-1])): # bullet
+            bullet = get_line_label(curve, phrases)
+            color = bullet['style']['fill']
+            if bullet['label']:
+                if color not in bullet_labels:
+                    bullet_labels[color] = []
+                bullet_labels[color].append(curve)
+            else:
+                if color not in bullet_lines:
+                    bullet_lines[color] = []
+                bullet_lines[color].append(curve)
+    return (bullet_lines,bullet_labels)
+
 def connect_graphs(graphs, axes_min, axes_max):
     to_delete = []
     plot_size = axes_max-axes_min
@@ -865,29 +883,99 @@ def get_line_label(line, phrases):
     line['label']=line['label'].strip()
     return line
 
-def get_labels(graphs,lines,axes,areas):
+def get_labels(graphs,label_graphs,bullet_lines,bullet_labels,axes,areas):
     new_graphs = []
     gridline = axes[1]['grid'][0]
     label_min_x = gridline['d'][0] + gridline['length']
     assigned_label = []
+    # add bullets to horizontal label_graphs with same style and different label
+    for i in range(len(label_graphs)):
+        for j in range(i):
+            label_graph = label_graphs[i]
+            cmp_label_graph = label_graphs[j]
+            if (label_graph['min'][1] == label_graph['max'][1] # label_graph horizontal
+            and cmp_label_graph['min'][1] == cmp_label_graph['max'][1] # cmp_label_graph horizontal
+            and label_graph['style'] == cmp_label_graph['style'] # same style
+            and label_graph['label'] != cmp_label_graph['label']): # different label
+                for color, bullabs in bullet_labels.items():
+                    for bullab in bullabs:
+                        if bullab['label'] == label_graph['label']:
+                            label_graph['style']['bullet'] = color
+                            bullab['label_graph'] = True
+                        elif bullab['label'] == cmp_label_graph['label']:
+                            cmp_label_graph['style']['bullet'] = color
+                            bullab['label_graph'] = True
+    # add label to graphs from horizontal label_graphs with the same style
     for graph in graphs:
         graph['label'] = ''
-        for i in range(len(lines)):
-            line = lines[i]
-            if (line['style'] == graph['style']
-            and line['min'][1] == line['max'][1]
-            and not np.array_equal(line['d'], graph['d'])
-            and line['min'][0]>label_min_x):
-                graph['label'] =  line['label']
-                graph['label_len'] = line['label_len']
+        for i in range(len(label_graphs)):
+            label_graph = label_graphs[i]
+            if (label_graph['style'] == graph['style'] # same style
+            and label_graph['min'][1] == label_graph['max'][1] # label_graph horizontal
+            and not np.array_equal(label_graph['d'], graph['d']) # label_graph != graph
+            and label_graph['min'][0]>label_min_x): # label_graph inside axes
+                graph['label'] =  label_graph['label'].strip()
+                graph['label_len'] = label_graph['label_len']
                 assigned_label.append(i)
+    # try to add not assigned labels to graphs without labels
     for graph in graphs:
+        if graph['label'] =='':
+            # try based on color and dashed / not dashed
+            for i in range(len(label_graphs)):
+                if i not in assigned_label:
+                    label_graph = label_graphs[i]
+                    if (label_graph['style']['stroke'] == graph['style']['stroke']
+                    and ((label_graph['style']['stroke-dasharray'] != 'none'
+                        and label_graph['style']['stroke-dasharray'] != ''
+                        and graph['style']['stroke-dasharray'] != 'none'
+                        and graph['style']['stroke-dasharray'] != '')
+                        or (label_graph['style']['stroke-dasharray'] == 'none'
+                            and graph['style']['stroke-dasharray'] == 'none'))
+                    and label_graph['min'][1] == label_graph['max'][1]
+                    and not np.array_equal(label_graph['d'], graph['d'])
+                    and label_graph['min'][0]>label_min_x):
+                        graph['label'] =  label_graph['label'].strip()
+                        graph['label_len'] = label_graph['label_len']
+                        assigned_label.append(i)
+            # try based on bullets
+            if graph['label'] =='':
+                bullets = {}
+                for color, bullines in bullet_lines.items():
+                    for i in range(len(bullines)):
+                        bulline = bullines[i]
+                        bullet_point = (bulline['min']+bulline['max'])/2.
+                        bullet_size = bulline['max']-bulline['min']
+                        for coord in graph['d']:
+                            if all(abs(coord-bullet_point) < bullet_size/1000):
+                                if color not in bullets:
+                                    bullets[color] = []
+                                else:
+                                    bullets[color].append(i)
+                if bullets:
+                    graph['bullets'] = bullets
+                    for i in range(len(label_graphs)):
+                        if (i not in assigned_label
+                        and 'bullet' in label_graphs[i]['style']
+                        and label_graphs[i]['style']['bullet'] in bullets):
+                            graph['label'] =  label_graph['label'].strip()
+                            graph['label_len'] = label_graph['label_len']
+                            assigned_label.append(i)
+                    for color, bullabs in bullet_labels.items():
+                        for bullab in bullabs:
+                            if ('label_graph' not in bullab
+                            and color in bullets):
+                                graph['label'] =  bullab['label'].strip()
+                                graph['label_len'] = bullab['label_len']
+    # compare graphs with eachother
+    for i in range(len(graphs)):
+        graph = graphs[i]
         graph['overlap'] = []
         graph['doubleline'] = False
         for j in range(len(graphs)):
             cmp_graph = graphs[j]
-            if 'overlap' not in cmp_graph:
-                cmp_graph['overlap'] = []
+            # search for doublelines and overlaps
+            if 'overlap' not in graph:
+                graph['overlap'] = []
             if (((array_d_contained(cmp_graph['d'], graph['d'])
                     or array_d_contained(graph['d'], cmp_graph['d']))
                 and cmp_graph['style'] != graph['style']
@@ -896,56 +984,39 @@ def get_labels(graphs,lines,axes,areas):
             or ('connected' in graph
                 and 'connected' not in cmp_graph
                 and cmp_graph['label'] == graph['label']
-                and graph['label'] != '')
+                and cmp_graph['label'] != '')
             ):
                 graph['doubleline'] = True
                 graph['overlap'].append(j)
+            # use areas to assign different labels to
+            # graphs with same style and label but different coordinates
             if (graph['label'] == cmp_graph['label']
             and graph['style'] == cmp_graph['style']
             and not np.array_equal(graph['d'], cmp_graph['d'])):
-                for i in range(len(lines)):
-                    if (i not in assigned_label
-                    and line['min'][1] == line['max'][1]
-                    and line['min'][0]>label_min_x):
-                        if 'areas' not in line:
-                            line['areas'] = []
-                        for j in range(len(areas)):
-                            area = areas[j]
-                            if (area['min'][0] == line['min'][0]
-                            and area['max'][0] == line['max'][0]
-                            and area['min'][1] <= line['min'][1]
-                            and area['max'][1] >= line['min'][1]):
-                                if j not in line['areas']:
-                                    line['areas'].append(j)
-                            elif (area['min'][0] == graph['min'][0]
-                            and area['max'][0] == graph['max'][0]
-                            and area['min'][1] <= graph['min'][1]
-                            and area['max'][1] >= graph['min'][1]):
-                                if 'areas' not in graph:
-                                    graph['areas'] = []
-                                if j not in graph['areas']:
-                                    graph['areas'].append(j)
-                            elif (area['min'][0] == cmp_graph['min'][0]
-                            and area['max'][0] == cmp_graph['max'][0]
-                            and area['min'][1] <= cmp_graph['min'][1]
-                            and area['max'][1] >= cmp_graph['min'][1]):
-                                if 'areas' not in cmp_graph:
-                                    cmp_graph['areas'] = []
-                                if j not in graph['areas']:
-                                    cmp_graph['areas'].append(j)
-                        for label_area in line['areas']:
+                for k in range(len(label_graphs)):
+                    if (k not in assigned_label
+                    and label_graph['min'][1] == label_graph['max'][1]
+                    and label_graph['min'][0]>label_min_x):
+                        for lg_g in (label_graph,graph):
+                            if 'areas' not in lg_g:
+                                lg_g['areas'] = []
+                        for l in range(len(areas)):
+                            area = areas[l]
+                            for lg_g in (label_graph,graph):
+                                if (area['min'][0] == lg_g['min'][0]
+                                and area['max'][0] == lg_g['max'][0]
+                                and area['min'][1] <= lg_g['min'][1]
+                                and area['max'][1] >= lg_g['min'][1]
+                                and l not in lg_g['areas']):
+                                        lg_g['areas'].append(l)
+                        for label_area in label_graph['areas']:
                             if 'areas' in graph:
                                 for graph_area in graph['areas']:
                                     if (areas[label_area]['style']
                                     == areas[graph_area]['style']):
-                                        graph['label'] =  line['label']
-                                        graph['label_len'] = line['label_len']
-                            elif 'areas' in cmp_graph:
-                                for cmp_graph_area in cmp_graph['areas']:
-                                    if (areas[label_area]['stlye']
-                                    == areas[cmp_graph_area]['stlye']):
-                                        cmp_graph['label'] =  line['label']
-                                        cmp_graph['label_len'] = line['label_len']
+                                        graph['label'] =  label_graph['label']
+                                        graph['label_len'] = label_graph['label_len']
+    # change doubleline to other graph with overlap
     for graph in graphs:
         if ('overlap' in graph
         and graph['doubleline']
@@ -960,32 +1031,8 @@ def get_labels(graphs,lines,axes,areas):
                         graph['doubleline'] = False
                         graphs[overlap]['doubleline'] = True
                         cmp_graph['doubleline'] = False
+    # only add those graphs to new_graphs that are no doubleline
     for graph in graphs:
-        if graph['label']=='' or 'connected' in graph:
-            #for cmp_graph in new_graphs:
-            #    if np.array_equal(cmp_graph['d'], graph['d']):
-            #        graph['doubleline'] = True
-            if not graph['doubleline']:
-                for line in lines:
-                    if (line['style']['stroke'] == graph['style']['stroke']
-                    and ((line['style']['stroke-dasharray'] != 'none'
-                        and line['style']['stroke-dasharray'] != ''
-                        and graph['style']['stroke-dasharray'] != 'none'
-                        and graph['style']['stroke-dasharray'] != '')
-                        or (line['style']['stroke-dasharray'] == 'none'
-                            and graph['style']['stroke-dasharray'] == 'none'))
-                    and line['min'][1] == line['max'][1]
-                    and not np.array_equal(line['d'], graph['d'])
-                    and line['min'][0]>label_min_x):
-                        stop = 0
-                        for cmp_graph in graphs:
-                            if (cmp_graph['label'] == line['label']
-                            and cmp_graph['style'] == line['style']):
-                                stop = 1
-                        if not stop:
-                            graph['label'] =  line['label']
-                            graph['label_len'] = line['label_len']
-                graph['label']=graph['label'].strip()
         if not graph['doubleline']:
             new_graphs.append(graph)
     graphs = new_graphs
