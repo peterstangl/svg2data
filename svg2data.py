@@ -37,7 +37,8 @@ class svg2data(object):
             self._tree.write(filename[:-4]+'_repaired.svg')
 
         # generate phrases and simplify xml
-        (root,phrases) = get_phrases(root)
+        (root,chars) = get_chars(root)
+        phrases = chars2phrases(chars)
 
         # get axes, plot size and lines to delete
         (axes, axes_min, axes_max, lines) = get_axes(lines,width,height)
@@ -465,7 +466,7 @@ def get_lines_curves(root):
             path.clear()
     return(root,lines,curves)
 
-def get_phrases(root):
+def get_chars(root):
     chars = []
     for text in root.iter('{http://www.w3.org/2000/svg}text'):
         if 'transform' in text.attrib:
@@ -499,15 +500,23 @@ def get_phrases(root):
                 if text_attr == None:
                     text_attr = ''
                 (size,unit) = font_size2size_units(style_dict['font-size'])
+                char_font = {}
+                if 'font-family' in style_dict:
+                    char_font['family'] = style_dict['font-family']
+                else:
+                    char_font['family'] = None
+                if 'font-weight' in style_dict:
+                    char_font['weight'] = style_dict['font-weight']
+                else:
+                    char_font['weight'] = None
                 for char_zip in zip(text_attr, x_list, y_list):
                     char = {'text':char_zip[0],'x':char_zip[1],'y':char_zip[2],
-                                                                    'size':size}
+                                                    'size':size,'font':char_font}
                     chars.append(char)
                 tspan.attrib['x'] = x
                 tspan.attrib['y'] = y
                 tspan.attrib['style'] = style
-    phrases = chars2phrases(chars)
-    return [root,phrases]
+    return [root,chars]
 
 def get_axes(lines,width,height):
     axes = [[],[]]
