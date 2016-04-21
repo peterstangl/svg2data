@@ -4,6 +4,20 @@ import xml.etree.ElementTree as ET
 from operator import itemgetter
 import copy
 import pylab as plb
+from matplotlib import rcParams
+from matplotlib.afm import AFM
+import os.path
+afm_dir = os.path.join(rcParams['datapath'],'fonts', 'afm')
+afm_dict = {}
+for afm_file in os.listdir(afm_dir):
+    afm_fname = os.path.join(afm_dir,afm_file)
+    afm = AFM(open(afm_fname, 'rb'))
+    afm_dict[afm.get_fullname().lower()] = afm_fname
+afm_translate = {'arial':'helvetica',
+                 'arial bold':'helvetica bold',
+                 'times':'times roman',
+                 'times new roman':'times roman',
+                 'times new roman bold':'times bold',}
 
 class svg2data(object):
     def __init__(self, filename, test=False):
@@ -343,7 +357,8 @@ def chars2phrases(chars):
         subscript = 0
         for i in range(len(chars_sorted)-1, -1, -1):
             testchar = chars_sorted[i]
-            if (testchar['x'] < startchar['x']+startchar['size']*0.891
+            # testchar directly follows startchar
+            if (testchar['x'] < startchar['x']+startchar['width']
                 and testchar['y'] == phrase['y']):
                 if superscript or subscript:
                     phrase['text'] += '}'
@@ -352,15 +367,7 @@ def chars2phrases(chars):
                 phrase['text'] += testchar['text']
                 startchar = testchar
                 del_list.append(i)
-            elif (testchar['x'] < startchar['x']+startchar['size']*.92 # concatenate
-                  and testchar['y'] == phrase['y']):
-                if superscript or subscript:
-                    phrase['text'] += '}'
-                    superscript = 0
-                    subscript = 0
-                phrase['text'] += ' '+testchar['text']
-                startchar = testchar
-                del_list.append(i)
+            # superscript
             elif (testchar['x'] < startchar['x']+startchar['size']
                   and testchar['y'] < phrase['y']
                   and testchar['y'] > phrase['y']-phrase['size']*0.9
@@ -375,6 +382,7 @@ def chars2phrases(chars):
                     phrase['text'] += testchar['text']
                 startchar = testchar
                 del_list.append(i)
+            # subscript
             elif (testchar['x'] < startchar['x']+startchar['size']
                   and testchar['y']-testchar['size'] < phrase['y']
                   and testchar['y']-testchar['size'] > phrase['y']-phrase['size']*0.9
@@ -468,6 +476,7 @@ def get_lines_curves(root):
 
 def get_chars(root):
     chars = []
+    afm = {}
     for text in root.iter('{http://www.w3.org/2000/svg}text'):
         if 'transform' in text.attrib:
             matrix = transform2matrix(text.attrib['transform'])
@@ -500,23 +509,55 @@ def get_chars(root):
                 if text_attr == None:
                     text_attr = ''
                 (size,unit) = font_size2size_units(style_dict['font-size'])
-                char_font = {}
                 if 'font-family' in style_dict:
-                    char_font['family'] = style_dict['font-family']
+                    font = style_dict['font-family'].lower()
+                    if ('font-weight' in style_dict
+                    and style_dict['font-weight'].lower() == 'bold'):
+                        font += ' '+'bold'
+                    if font not in afm:
+                        afm[font] = get_font_metrics(font)
                 else:
-                    char_font['family'] = None
-                if 'font-weight' in style_dict:
-                    char_font['weight'] = style_dict['font-weight']
-                else:
-                    char_font['weight'] = None
+                    font = None
                 for char_zip in zip(text_attr, x_list, y_list):
-                    char = {'text':char_zip[0],'x':char_zip[1],'y':char_zip[2],
-                                                    'size':size,'font':char_font}
+                    char_text = char_zip[0]
+                    if font and afm[font]:
+                        c = ord(char_text)
+                        if c in afm[font]._metrics:
+                            wx = afm[font]._metrics[c][0]
+                            wx_space = afm[font]._metrics[32][0]
+                            width = (wx+20)*(size)/1000.
+                            ws_p = (wx_space+20)*(size)/1000.
+                            ws_m = (wx_space-20)*(size)/1000.
+                        else:
+                            width = size*0.891
+                            ws_p = size*.92
+                            ws_m = size*.90
+                    else:
+                        width = size*0.891
+                        ws_p = size*.92
+                        ws_m = size*.90
+                    char = {'text':char_text,'x':char_zip[1],'y':char_zip[2],
+                            'size':size,'width':width,'width_space':[ws_p,ws_m]}
                     chars.append(char)
                 tspan.attrib['x'] = x
                 tspan.attrib['y'] = y
                 tspan.attrib['style'] = style
     return [root,chars]
+
+def get_font_metrics(font):
+    if font in afm_dict:
+        afm_file = open(afm_dict[font], 'rb')
+        afm = AFM(afm_file)
+        afm_file.close()
+    elif font in afm_translate:
+        font_translated = afm_translate[font]
+        afm_file = open(afm_dict[font_translated], 'rb')
+        afm = AFM(afm_file)
+        afm_file.close()
+    else:
+        afm = None
+        #print(font+"\n")
+    return afm
 
 def get_axes(lines,width,height):
     axes = [[],[]]
