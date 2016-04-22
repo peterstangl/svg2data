@@ -20,7 +20,7 @@ afm_translate = {'arial':'helvetica',
                  'times new roman bold':'times bold',}
 
 class svg2data(object):
-    def __init__(self, filename, test=False):
+    def __init__(self, filename, test=False, debug=None):
         restart = 1
         reason = ''
         while restart:
@@ -67,16 +67,48 @@ class svg2data(object):
         graphs = connect_graphs(graphs, axes_min, axes_max)
 
         # calibrate grid
-        grids = calibrate_grid(axes,phrases,width,height)
+        if (debug != 'calibrate_grid'
+        and debug != 'get_graphs_areas'
+        and debug != 'get_axes'):
+            grids = calibrate_grid(axes,phrases,width,height)
+        elif debug == 'calibrate_grid':
+            self.debug = {'axes':axes,
+                          'phrases':phrases,
+                          'width':width,
+                          'height':height}
 
         # calibrate graphs
-        graphs = calibrate_graphs(graphs,grids)
+        if (debug != 'calibrate_graphs'
+        and debug != 'calibrate_grid'
+        and debug != 'get_graphs_areas'
+        and debug != 'get_axes'):
+            graphs = calibrate_graphs(graphs,grids)
+        elif debug ==  'calibrate_graphs':
+            self.debug = {'axes':axes,
+                          'phrases':phrases,
+                          'width':width,
+                          'height':height}
 
         # get labels for graphs
-        graphs = get_labels(graphs,label_graphs,bullet_lines,bullet_labels,grids,areas)
+        if (debug != 'get_labels'
+        and debug != 'calibrate_graphs'
+        and debug != 'calibrate_grid'
+        and debug != 'get_graphs_areas'
+        and debug != 'get_axes'):
+            graphs = get_labels(graphs,label_graphs,bullet_lines,bullet_labels,grids,areas)
+        elif debug == 'get_labels':
+            self.debug = {'graphs':graphs,
+                          'label_graphs':label_graphs,
+                          'bullet_lines':bullet_lines,
+                          'bullet_labels':bullet_labels,
+                          'grids':grids,
+                          'areas':areas}
 
+        if (debug != 'calibrate_grid'
+        and debug != 'get_graphs_areas'
+        and debug != 'get_axes'):
+            self.grids = grids
         self.graphs = graphs
-        self.grids = grids
 
     def writesvg(self,filename):
         self._tree.write(filename)
