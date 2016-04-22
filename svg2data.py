@@ -2,7 +2,6 @@ import numpy as np
 import ast
 import xml.etree.ElementTree as ET
 from operator import itemgetter
-import copy
 import pylab as plb
 from matplotlib import rcParams
 from matplotlib.afm import AFM
@@ -387,11 +386,17 @@ def chars2phrases(chars):
         del_list = []
         superscript = 0
         subscript = 0
+        ascent = 0
+        descent = 0
         for i in range(len(chars_sorted)-1, -1, -1):
             testchar = chars_sorted[i]
             # testchar directly follows startchar
-            if (testchar['x'] < startchar['x']+startchar['width']
-                and testchar['y'] == phrase['y']):
+            if (testchar['y'] == phrase['y']
+            and (testchar['x'] < startchar['x']+startchar['width']
+                or (testchar['x'] < startchar['x']+startchar['width_space']*4.
+                    and (testchar['text'] == '×' or startchar['text'] == '×'))
+                )
+            ):
                 if superscript or subscript:
                     phrase['text'] += '}'
                     superscript = 0
@@ -401,9 +406,9 @@ def chars2phrases(chars):
                 del_list.append(i)
             # superscript
             elif (testchar['x'] < startchar['x']+startchar['size']
-                  and testchar['y'] < phrase['y']
-                  and testchar['y'] > phrase['y']-phrase['size']*0.9
-                  and testchar['size'] < 0.8*phrase['size']):
+            and testchar['y'] < phrase['y']
+            and testchar['y'] > phrase['y']-phrase['size']*0.9
+            and testchar['size'] < 0.8*phrase['size']):
                 if not superscript:
                     if subscript:
                         phrase['text'] += '}'
@@ -412,13 +417,16 @@ def chars2phrases(chars):
                     superscript = 1
                 else:
                     phrase['text'] += testchar['text']
+                ascent_new = (phrase['y']-phrase['size'])-(testchar['y']-testchar['size'])
+                if ascent_new > ascent:
+                    ascent = ascent_new
                 startchar = testchar
                 del_list.append(i)
             # subscript
             elif (testchar['x'] < startchar['x']+startchar['size']
-                  and testchar['y']-testchar['size'] < phrase['y']
-                  and testchar['y']-testchar['size'] > phrase['y']-phrase['size']*0.9
-                  and testchar['size'] < 0.8*phrase['size']):
+            and testchar['y']-testchar['size'] < phrase['y']
+            and testchar['y']-testchar['size'] > phrase['y']-phrase['size']*0.9
+            and testchar['size'] < 0.8*phrase['size']):
                 if not subscript:
                     if superscript:
                         phrase['text'] += '}'
@@ -427,12 +435,16 @@ def chars2phrases(chars):
                     subscript = 1
                 else:
                     phrase['text'] += testchar['text']
+                descent_new = testchar['y']-phrase['y']
+                if descent_new > descent:
+                    descent = descent_new
                 startchar = testchar
                 del_list.append(i)
         if superscript or subscript:
             phrase['text'] += '}'
         length = startchar['x']+startchar['size']-phrase['x']
         phrase['dimensions'] = np.array([length,phrase['size']])
+        phrase['asc_desc'] = np.array([ascent,descent])
         phrase['coords'] = np.array([phrase['x'],phrase['y']])
         del phrase['x']
         del phrase['y']
@@ -558,18 +570,15 @@ def get_chars(root):
                             wx = afm[font]._metrics[c][0]
                             wx_space = afm[font]._metrics[32][0]
                             width = (wx+20)*(size)/1000.
-                            ws_p = (wx_space+20)*(size)/1000.
-                            ws_m = (wx_space-20)*(size)/1000.
+                            width_space = (wx_space)*(size)/1000.
                         else:
                             width = size*0.891
-                            ws_p = size*.92
-                            ws_m = size*.90
+                            width_space = size*.92
                     else:
                         width = size*0.891
-                        ws_p = size*.92
-                        ws_m = size*.90
+                        width_space = size*.92
                     char = {'text':char_text,'x':char_zip[1],'y':char_zip[2],
-                            'size':size,'width':width,'width_space':[ws_p,ws_m]}
+                            'size':size,'width':width,'width_space':width_space}
                     chars.append(char)
                 tspan.attrib['x'] = x
                 tspan.attrib['y'] = y
@@ -767,6 +776,43 @@ def connect_graphs(graphs, axes_min, axes_max):
             new_graphs.append(graphs[i])
     return new_graphs
 
+def add_gridline_value(grid_calibr,gridline, phrases, axis, axis_type):
+    for phrase in phrases:
+        x = phrase['coords'][0]
+        y = phrase['coords'][1]
+        dx = phrase['dimensions'][0]
+        dy = phrase['dimensions'][1]
+        if ((y > gridline['d'][1]+gridline['length']
+            and x < gridline['d'][0]
+            and x+dx > gridline['d'][0]
+            and y-phrase['asc_desc'][0] < axis['min'][1]+dy*1.2
+            and axis_type == 0)
+        or
+            (x+dx*0.7 < gridline['d'][0]
+            and y-dy < gridline['d'][1]
+            and y > gridline['d'][1]
+            and x > gridline['d'][0]-dx*1.5
+            and x > 0
+            and axis_type == 1)
+        ):
+            gridline['text'] = phrase['text']
+            text = gridline['text'];
+            text = text.replace('−','-')
+            if '^' in text:
+                text = text.replace('}','')
+                text = text.replace('0^{','E')
+            float_strings = text.split("×")
+            float_val = 1.
+            for float_string in float_strings:
+                float_val = float_val * float(float_string)
+            gridline['value'] = float_val
+            for gridtest in grid_calibr:
+                if (gridtest['d'] == gridline['d']).all():
+                    break
+            else:
+                grid_calibr.append(gridline)
+    return grid_calibr
+
 def calibrate_grid(axes,phrases,width,height):
     grids_calibr = [{},{}]
     for axis_type in range(2):
@@ -779,7 +825,7 @@ def calibrate_grid(axes,phrases,width,height):
                 grid_calibr = []
                 grid_sorted = sorted(axis['grid'], key=itemgetter('length'), reverse=True)
                 for phrase in phrases:
-                    if ((phrase['coords'][1] > axis['min'][1]+phrase['dimensions'][1]*1.1 # x-axis label
+                    if ((phrase['coords'][1] > axis['min'][1]+phrase['dimensions'][1]*1.4 # x-axis label
                          and axis_type == 0)
                         or
                         (phrase['coords'][0]+phrase['dimensions'][0]*1.2 < axis['min'][0] # y-axis label
@@ -790,34 +836,11 @@ def calibrate_grid(axes,phrases,width,height):
                       else:
                           grids_calibr[axis_type]['name'] = phrase['text']
                 for gridline in grid_sorted:
-                    for phrase in phrases:
-                        if (((phrase['coords'][1] > gridline['d'][1]+gridline['length']
-                              and phrase['coords'][0] < gridline['d'][0]
-                              and phrase['coords'][0]+phrase['dimensions'][0] > gridline['d'][0]
-                              and phrase['coords'][1] < axis['min'][1]+phrase['dimensions'][1]*1.1
-                             ) and axis_type == 0)
-                            or
-                            ((phrase['coords'][0]+phrase['dimensions'][0]*0.7 < gridline['d'][0]
-                              and phrase['coords'][1]-phrase['dimensions'][1] < gridline['d'][1]
-                              and phrase['coords'][1] > gridline['d'][1]
-                              and phrase['coords'][0] > gridline['d'][0]-phrase['dimensions'][0]*1.5
-                             ) and axis_type == 1)
-                            ):
-                            if (grid_calibr and gridline['length'] < grid_calibr[-1]['length']):
-                                break
-                            else:
-                                gridline['text'] = phrase['text']
-                                text = gridline['text'];
-                                text = text.replace('−','-')
-                                if '^' in text:
-                                    text = text.replace('}','')
-                                    text = text.replace('0^{','E')
-                                gridline['value'] = float(text)
-                                for gridtest in grid_calibr:
-                                    if (gridtest['d'] == gridline['d']).all():
-                                        break
-                                else:
-                                    grid_calibr.append(gridline)
+                    if (grid_calibr and gridline['length'] < grid_calibr[-1]['length']):
+                        break
+                    else:
+                        grid_calibr = add_gridline_value(grid_calibr,gridline, phrases, axis, axis_type)
+                #print(grid_calibr)
                 if (grid_calibr and len(grid_calibr) == 1):
                     grid = sorted(axis['grid'], key=lambda k: (k['d'][axis_type]))
                     for i in range(len(grid)):
@@ -848,7 +871,10 @@ def calibrate_grid(axes,phrases,width,height):
                             grid[i]['value'] = v
                         grid_calibr = grid
                     else:
-                        raise Exception('Only one number on axis and no logscale found!')
+                        for gridline in grid_sorted:
+                            grid_calibr = add_gridline_value(grid_calibr,gridline, phrases, axis, axis_type)
+                        if (grid_calibr and len(grid_calibr) == 1):
+                            raise Exception('Only one number on axis and no logscale found!')
                 if (grid_calibr and len(grid_calibr) >= 3):
                     value0 = grid_calibr[0]['value']
                     value1 = grid_calibr[1]['value']
