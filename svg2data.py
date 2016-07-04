@@ -34,20 +34,20 @@ class svg2data(object):
                 if reason == 'neg_vals' and 'transform' in child.attrib:
                     del child.attrib['transform']
                 child = pass_transformation(child)
+            if reason == 'neg_vals':
+                self._tree.write(filename)
 
             # generate line list and simplify xml
             (root,lines,curves) = get_lines_curves(root)
 
             for line in lines:
                 if (line['min']/width<-0.01).any():
-                    if restart == 0:
+                    if reason == '':
                         restart = 1
                         reason = 'neg_vals'
                     else:
                         raise Exception('Not able to repair damaged SVG file!')
                     break
-        if not restart and reason == 'neg_vals' and not test:
-            self._tree.write(filename[:-4]+'_repaired.svg')
 
         # generate phrases and simplify xml
         (root,chars) = get_chars(root)
