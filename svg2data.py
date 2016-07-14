@@ -54,21 +54,44 @@ class svg2data(object):
         phrases = chars2phrases(chars)
 
         # get axes, plot size and lines to delete
-        (axes, axes_min, axes_max, lines) = get_axes(lines,width,height)
+        if debug != 'get_axes':
+            (axes, axes_min, axes_max, lines) = get_axes(lines,width,height)
+        elif debug == 'get_axes':
+            graphs = lines
+            self.debug = {'lines':lines,
+                          'width':width,
+                          'height':height}
 
         # get graphs, areas and labels
-        (graphs,areas,label_graphs) = get_graphs_areas(lines, axes, axes_min, axes_max, phrases)
+        if (debug != 'get_graphs_areas'
+        and debug != 'get_axes'):
+            (graphs,areas,label_graphs) = get_graphs_areas(lines, axes, axes_min, axes_max, phrases)
+        elif debug == 'get_graphs_areas':
+            graphs = lines
+            self.debug = {'lines':lines,
+                          'axes':axes,
+                          'axes_min':axes_min,
+                          'axes_max':axes_max,
+                          'phrases':phrases}
 
         #get bulletlines and labels
         bullet_lines, bullet_labels = get_bullets(curves,phrases)
 
         # connect graphs with the same style
-        graphs = connect_graphs(graphs, axes_min, axes_max)
+        if (debug != 'get_graphs_areas'
+        and debug != 'get_axes'
+        and debug != 'connect_graphs'):
+            graphs = connect_graphs(graphs, axes_min, axes_max)
+        elif debug == 'connect_graphs':
+            self.debug = {'graphs':graphs,
+                          'axes_min':axes_min,
+                          'axes_max':axes_max}
 
         # calibrate grid
         if (debug != 'calibrate_grid'
         and debug != 'get_graphs_areas'
-        and debug != 'get_axes'):
+        and debug != 'get_axes'
+        and debug != 'connect_graphs'):
             grids = calibrate_grid(axes,phrases,width,height)
         elif debug == 'calibrate_grid':
             self.debug = {'axes':axes,
@@ -80,7 +103,8 @@ class svg2data(object):
         if (debug != 'calibrate_graphs'
         and debug != 'calibrate_grid'
         and debug != 'get_graphs_areas'
-        and debug != 'get_axes'):
+        and debug != 'get_axes'
+        and debug != 'connect_graphs'):
             graphs = calibrate_graphs(graphs,grids)
         elif debug ==  'calibrate_graphs':
             self.debug = {'axes':axes,
@@ -93,7 +117,8 @@ class svg2data(object):
         and debug != 'calibrate_graphs'
         and debug != 'calibrate_grid'
         and debug != 'get_graphs_areas'
-        and debug != 'get_axes'):
+        and debug != 'get_axes'
+        and debug != 'connect_graphs'):
             graphs = get_labels(graphs,label_graphs,bullet_lines,bullet_labels,grids,areas)
         elif debug == 'get_labels':
             self.debug = {'graphs':graphs,
@@ -105,7 +130,8 @@ class svg2data(object):
 
         if (debug != 'calibrate_grid'
         and debug != 'get_graphs_areas'
-        and debug != 'get_axes'):
+        and debug != 'get_axes'
+        and debug != 'connect_graphs'):
             self.grids = grids
         self.graphs = graphs
 
