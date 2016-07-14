@@ -634,14 +634,52 @@ def get_axes(lines,width,height):
             (grid, lines_to_delete) = gridlines(line, lines, width, height, lines_to_delete)
             if grid:
                 line['grid']=grid
+                if line['min'][1]/height < 0.5:
+                    line['axis_pos'] = 0
+                else:
+                    line['axis_pos'] = 1
                 axes[0].append(line)
                 lines_to_delete.append(line)
         elif line['max'][1]-line['min'][1] > height/3:
             (grid, lines_to_delete) = gridlines(line, lines, width, height, lines_to_delete)
             if grid:
                 line['grid']=grid
+                if line['min'][0]/width > 0.5:
+                    line['axis_pos'] = 0
+                else:
+                    line['axis_pos'] = 1
                 axes[1].append(line)
                 lines_to_delete.append(line)
+    axes_positions = [[[],[]],[[],[]]]
+    for i in range(2):
+        for j in range(len(axes[i])):
+            if axes[i][j]['axis_pos'] == 0:
+                axes_positions[i][0].append(j)
+            else:
+                axes_positions[i][1].append(j)
+    cleaned_axes = [[],[]]
+    for i in range(2):
+        axes_type = axes_positions[i]
+        for axes_type_pos in axes_type:
+            if len(axes_type_pos)>1:
+                min_tot = np.array([width,height])
+                max_tot = np.array([0.,0.])
+                best_id = None
+                num_grdlns = 0
+                for j in axes_type_pos:
+                    axis_min = axes[i][j]['min']
+                    axis_num_grdlns = len(axes[i][j]['grid'])
+                    if axis_min[1-i] < min_tot[1-i] and axis_num_grdlns >= num_grdlns:
+                        min_tot = axis_min
+                        num_grdlns = axis_num_grdlns
+                        best_id = j
+                for j in axes_type_pos:
+                    if j == best_id:
+                        cleaned_axes[i].append(axes[i][j])
+            elif len(axes_type_pos)==1:
+                j = axes_type_pos[0]
+                cleaned_axes[i].append(axes[i][j])
+    axes = cleaned_axes
     axes_min = np.array([axes[0][0]['min'][0],axes[1][0]['min'][1]])
     axes_max = np.array([axes[0][0]['max'][0],axes[1][0]['max'][1]])
     new_lines = []
