@@ -1236,10 +1236,12 @@ def plot_graphs(graphs,grids_calibr):
         if 'stroke-dasharray' in graph['style'] and graph['style']['stroke-dasharray'] != 'none':
             plb.plt.setp(line, dashes=[2,2])
     #plt.title('title')
-    xlabel = grids_calibr[0]['name'].replace(' ','\ ').replace('%','\%')
-    ylabel = grids_calibr[1]['name'].replace(' ','\ ').replace('%','\%')
-    plt.xlabel(r'$'+xlabel+'$')
-    plt.ylabel(r'$'+ylabel+'$')
+    if 'name' in grids_calibr[0]:
+        xlabel = grids_calibr[0]['name'].replace(' ','\ ').replace('%','\%')
+        plt.xlabel(r'$'+xlabel+'$')
+    if 'name' in grids_calibr[1]:
+        ylabel = grids_calibr[1]['name'].replace(' ','\ ').replace('%','\%')
+        plt.ylabel(r'$'+ylabel+'$')
     plt.xscale(grids_calibr[0]['type'])
     plt.yscale(grids_calibr[1]['type'])
     plt.rcParams['legend.loc'] = 'best'
