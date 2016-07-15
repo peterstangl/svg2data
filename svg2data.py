@@ -569,46 +569,57 @@ def get_chars(root):
                 text.attrib['transform'] = matrix2transform(rotationmatrix)
             else:
                 del text.attrib['transform']
-            for tspan in text:
-                (x,y)=transform_text(tspan.attrib['x'],tspan.attrib['y'],matrix)
-                x_list = ast.literal_eval('['+x.replace(' ',',')+']')
-                y_list = ast.literal_eval('['+y.replace(' ',',')+']')
+        else:
+            matrix = np.identity(3)
+        for tspan in text:
+            (x,y)=transform_text(tspan.attrib['x'],tspan.attrib['y'],matrix)
+            x_list = ast.literal_eval('['+x.replace(' ',',')+']')
+            y_list = ast.literal_eval('['+y.replace(' ',',')+']')
+            if 'style' in tspan.attrib:
                 style = scale_style(tspan.attrib['style'], matrix)
-                style_dict = style2dict(style)
-                text_attr = tspan.text
-                if text_attr == None:
-                    text_attr = ''
-                (size,unit) = font_size2size_units(style_dict['font-size'])
-                if 'font-family' in style_dict:
-                    font = style_dict['font-family'].lower()
-                    if ('font-weight' in style_dict
-                    and style_dict['font-weight'].lower() == 'bold'):
-                        font += ' '+'bold'
-                    if font not in afm:
-                        afm[font] = get_font_metrics(font)
-                else:
-                    font = None
-                for char_zip in zip(text_attr, x_list, y_list):
-                    char_text = char_zip[0]
-                    if font and afm[font]:
-                        c = ord(char_text)
-                        if c in afm[font]._metrics:
-                            wx = afm[font]._metrics[c][0]
-                            wx_space = afm[font]._metrics[32][0]
-                            width = (wx+20)*(size)/1000.
-                            width_space = (wx_space)*(size)/1000.
-                        else:
-                            width = size*0.891
-                            width_space = size*.92
+            elif 'style' in text.attrib:
+                style = scale_style(text.attrib['style'], matrix)
+            style_dict = style2dict(style)
+            text_attr = tspan.text
+            if text_attr == None:
+                text_attr = ''
+            (size,unit) = font_size2size_units(style_dict['font-size'])
+            if 'font-family' in style_dict:
+                font = style_dict['font-family'].lower()
+                if ('font-weight' in style_dict
+                and style_dict['font-weight'].lower() == 'bold'):
+                    font += ' '+'bold'
+                if font not in afm:
+                    afm[font] = get_font_metrics(font)
+            else:
+                font = None
+            for i in range(len(text_attr)):
+                char_text = text_attr[i]
+                if font and afm[font]:
+                    c = ord(char_text)
+                    if c in afm[font]._metrics:
+                        wx = afm[font]._metrics[c][0]
+                        wx_space = afm[font]._metrics[32][0]
+                        width = (wx+20)*(size)/1000.
+                        width_space = (wx_space)*(size)/1000.
                     else:
                         width = size*0.891
                         width_space = size*.92
-                    char = {'text':char_text,'x':char_zip[1],'y':char_zip[2],
-                            'size':size,'width':width,'width_space':width_space}
-                    chars.append(char)
-                tspan.attrib['x'] = x
-                tspan.attrib['y'] = y
-                tspan.attrib['style'] = style
+                else:
+                    width = size*0.891
+                    width_space = size*.92
+                if len(x_list)==i:
+                    last_width = chars[-1]['width']
+                    x_list.append(x_list[i-1]+last_width*0.99)
+                    y_list.append(y_list[i-1])
+                x_val = x_list[i]
+                y_val = y_list[i]
+                char = {'text':char_text,'x':x_val,'y':y_val,
+                        'size':size,'width':width,'width_space':width_space}
+                chars.append(char)
+            tspan.attrib['x'] = x
+            tspan.attrib['y'] = y
+            tspan.attrib['style'] = style
     return [root,chars]
 
 def get_font_metrics(font):
