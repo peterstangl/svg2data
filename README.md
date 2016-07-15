@@ -13,7 +13,8 @@ A Python module for reading data from a plot provided as SVG file.
 
 ## Dependencies
 In addition to the Python standard library, the **svg2data** module relies on the
-packages **numpy** for numerical calculations and **pylab** for plotting.
+packages **numpy** for numerical calculations and **matplotlib** for plotting and
+providing font metrics.
 
 ## Installation
 To install the package in your user space, change to the repository folder and enter
@@ -29,7 +30,7 @@ It can be imported with
 To use the plotting feature inside an IPython notebook, you may execute the
 following line inside the notebook:
 
-    %pylab inline
+    %matplotlib inline
 
 ### The svg2data class
 The class `svg2data` is used to read data from a SVG file containing a plot.

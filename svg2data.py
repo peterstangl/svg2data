@@ -2,7 +2,7 @@ import numpy as np
 import ast
 import xml.etree.ElementTree as ET
 from operator import itemgetter
-import pylab as plb
+import matplotlib.pyplot as plt
 from matplotlib import rcParams
 from matplotlib.afm import AFM
 import os.path
@@ -1222,7 +1222,6 @@ def get_labels(graphs,label_graphs,bullet_lines,bullet_labels,axes,areas):
     return graphs
 
 def plot_graphs(graphs,grids_calibr):
-    plt = plb.plt
     for graph in graphs:
         if 'label' in graph and graph['label'] != '':
             labeltext = graph['label']
@@ -1234,7 +1233,7 @@ def plot_graphs(graphs,grids_calibr):
                         graph['style']['stroke'],
                         label=r'$'+labeltext+'$')
         if 'stroke-dasharray' in graph['style'] and graph['style']['stroke-dasharray'] != 'none':
-            plb.plt.setp(line, dashes=[2,2])
+            plt.setp(line, dashes=[2,2])
     #plt.title('title')
     if 'name' in grids_calibr[0]:
         xlabel = grids_calibr[0]['name'].replace(' ','\ ').replace('%','\%')
