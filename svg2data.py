@@ -884,6 +884,9 @@ def add_gridline_value(grid_calibr,gridline, phrases, axis, axis_type):
             for gridtest in grid_calibr:
                 if (gridtest['d'] == gridline['d']).all():
                     break
+                elif (gridtest['value'] == gridline['value']
+                and gridtest['length'] > gridline['length']):
+                    break
             else:
                 grid_calibr.append(gridline)
     return grid_calibr
