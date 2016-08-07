@@ -452,7 +452,8 @@ def chars2phrases(chars):
             elif (testchar['x'] < startchar['x']+startchar['size']
             and testchar['y']-testchar['size'] < phrase['y']
             and testchar['y']-testchar['size'] > phrase['y']-phrase['size']*0.9
-            and testchar['size'] < 0.8*phrase['size']):
+            and testchar['size'] < 0.8*phrase['size']
+            and startchar['text'] not in '0123456789'):
                 if not subscript:
                     if superscript:
                         phrase['text'] += '}'
