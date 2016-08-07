@@ -498,6 +498,7 @@ def gridlines(axis, line_list, width, height, lines_to_delete): # edited
             gridline = {}
             gridline['length'] = length
             gridline['d'] = line['min']
+            gridline['line'] = line
             gridlines.append(gridline)
             lines_to_delete.append(line)
     return [gridlines, lines_to_delete]
@@ -669,6 +670,7 @@ def get_axes(lines,width,height):
             else:
                 axes_positions[i][1].append(j)
     cleaned_axes = [[],[]]
+    deleted_axes = []
     for i in range(2):
         axes_type = axes_positions[i]
         for axes_type_pos in axes_type:
@@ -686,19 +688,30 @@ def get_axes(lines,width,height):
                         best_id = j
                 for j in axes_type_pos:
                     if j == best_id:
+                        for gridline in axes[i][j]['grid']:
+                            del gridline['line']
                         cleaned_axes[i].append(axes[i][j])
+                    else:
+                        deleted_axes.append(axes[i][j])
             elif len(axes_type_pos)==1:
                 j = axes_type_pos[0]
+                for gridline in axes[i][j]['grid']:
+                    del gridline['line']
                 cleaned_axes[i].append(axes[i][j])
     axes = cleaned_axes
     axes_min = np.array([axes[0][0]['min'][0],axes[1][0]['min'][1]])
     axes_max = np.array([axes[0][0]['max'][0],axes[1][0]['max'][1]])
     new_lines = []
     for line in lines:
+        save_line = False
+        for deleted_axis in deleted_axes:
+            for gridline in deleted_axis['grid']:
+                if line is gridline['line']:
+                    save_line = True
         if ((line['max']-.1 <= axes_max).all() and (line['min']+.1 >= axes_min).all()):
             delete = False
             for line_to_delete in lines_to_delete:
-                if line is line_to_delete:
+                if line is line_to_delete and not save_line:
                     delete = True
                     break
             if not delete:
