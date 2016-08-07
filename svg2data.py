@@ -873,7 +873,7 @@ def add_gridline_value(grid_calibr,gridline, phrases, axis, axis_type):
         if ((y > gridline['d'][1]+gridline['length']
             and x < gridline['d'][0]
             and x+dx > gridline['d'][0]
-            and y-phrase['asc_desc'][0] < axis['min'][1]+dy*1.2
+            and y < axis['min'][1]+(dy+phrase['asc_desc'][0])*1.4
             and axis_type == 0)
         or
             (x+dx*0.7 < gridline['d'][0]
@@ -916,7 +916,7 @@ def calibrate_grid(axes,phrases,width,height):
                 grid_calibr = []
                 grid_sorted = sorted(axis['grid'], key=itemgetter('length'), reverse=True)
                 for phrase in phrases:
-                    if ((phrase['coords'][1] > axis['min'][1]+phrase['dimensions'][1]*1.4 # x-axis label
+                    if ((phrase['coords'][1] > axis['min'][1]+(phrase['dimensions'][1]+phrase['asc_desc'][0])*1.4 # x-axis label
                          and axis_type == 0)
                         or
                         (phrase['coords'][0]+phrase['dimensions'][0]*1.2 < axis['min'][0] # y-axis label
@@ -931,7 +931,6 @@ def calibrate_grid(axes,phrases,width,height):
                         break
                     else:
                         grid_calibr = add_gridline_value(grid_calibr,gridline, phrases, axis, axis_type)
-                #print(grid_calibr)
                 if (grid_calibr and len(grid_calibr) == 1):
                     grid = sorted(axis['grid'], key=lambda k: (k['d'][axis_type]))
                     for i in range(len(grid)):
