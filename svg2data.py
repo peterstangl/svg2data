@@ -809,6 +809,13 @@ def connect_graphs(graphs, axes_min, axes_max):
     for i in range(len(graphs)):
         connections[0][i]={'id':i,'delta':float("inf")}
         connections[1][i]={'id':i,'delta':float("inf")}
+        coords = graphs[i]['d']
+        num_coords = len(coords)
+        for k in range(num_coords):
+            if (k < num_coords-1
+            and coords[k][0] == coords[k+1][0]
+            and coords[k][1] != coords[k+1][1]):
+                coords[k+1][0]  = coords[k+1][0]+coords[k+1][0]*1e-15
         length_i = graphs[i]['d'][1]-graphs[i]['d'][0]
         slope_i = length_i[1]/length_i[0]
         for j in range(i+1, len(graphs)):
