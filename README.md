@@ -25,7 +25,7 @@ To install the package in your user space, change to the repository folder and e
 The main functionality is provided by the class `svg2data`.
 It can be imported with
 
-    import svg2data from svg2data
+    from svg2data import svg2data
 
 To use the plotting feature inside an IPython notebook, you may execute the
 following line inside the notebook:
