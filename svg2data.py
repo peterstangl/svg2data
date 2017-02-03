@@ -902,7 +902,7 @@ def add_gridline_value(grid_calibr,gridline, phrases, axis, axis_type):
             for float_string in float_strings:
                 try:
 +                    float_val = float_val * float(float_string)
-+                except:
++               except:
 +                    pass
             gridline['value'] = float_val
             for gridtest in grid_calibr:
