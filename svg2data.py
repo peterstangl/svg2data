@@ -996,7 +996,7 @@ def calibrate_grid(axes,phrases,width,height):
                 elif (grid_calibr and len(grid_calibr) >= 2):
                     value0 = grid_calibr[0]['value']
                     value1 = grid_calibr[1]['value']
-                    if (value0/value1 == 10 or value0/value1 == 1/10):
+                    if value1 != 0 and (value0/value1 == 10 or value0/value1 == 1/10):
                         axis_scaling = 'log'
                         for gridline in grid_calibr:
                             gridline['value'] = np.log(gridline['value'])
