@@ -900,7 +900,10 @@ def add_gridline_value(grid_calibr,gridline, phrases, axis, axis_type):
             float_strings = text.split("×")
             float_val = 1.
             for float_string in float_strings:
-                float_val = float_val * float(float_string)
+                try:
++                    float_val = float_val * float(float_string)
++               except:
++                    pass
             gridline['value'] = float_val
             for gridtest in grid_calibr:
                 if (gridtest['d'] == gridline['d']).all():
