@@ -279,6 +279,8 @@ def path_to_lines_and_curves(path_data): # SsQqTtAa is ignored
                     line = []
         else:
             if not absolute:
+                if command == 'v':
+                    xy = 1
                 entry = base_coordinate[xy]+float(entry)
             else:
                 entry = float(entry)
