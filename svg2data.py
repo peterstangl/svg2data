@@ -191,13 +191,8 @@ def transform2matrix(string):
     return matrix3x3
 
 def matrix2transform(matrix):
-    return ('matrix('
-                    +str(matrix[0][0])+','
-                    +str(matrix[1][0])+','
-                    +str(matrix[0][1])+','
-                    +str(matrix[1][1])+','
-                    +str(matrix[0][2])+','
-                    +str(matrix[1][2])+')')
+    return 'matrix({!s},{!s},{!s},{!s},{!s},{!s})'.format(
+                                                    *matrix[:2,:].T.flatten())
 
 def pass_transformation(parent):
     if 'clip-path' in parent.attrib:
