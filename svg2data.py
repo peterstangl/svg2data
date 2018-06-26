@@ -340,7 +340,7 @@ def transform_path(path, matrix):
     return new_points[:,0:2]
 
 def style2dict(style):
-    style = '{\''+style.replace(':','\':\'').replace(';','\',\'')+'\'}'
+    style = '{\''+style.replace(':','\':\'').replace(';','\',\'').replace('\'\'','\'')+'\'}'
     return ast.literal_eval(style)
 
 def dict2style(dict):
