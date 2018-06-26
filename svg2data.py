@@ -18,6 +18,16 @@ afm_translate = {'arial':'helvetica',
                  'times':'times roman',
                  'times new roman':'times roman',
                  'times new roman bold':'times bold',}
+latex_replace = [
+    (' ',r'\ '),
+    ('%',r'\% '),
+    ('±',r'\pm '),
+    ('σ',r'\sigma '),
+    ('→',r'\to '),
+    ('×',r'\times '),
+    ('ν',r'\nu '),
+    ('´',r'^\prime '),
+]
 
 class svg2data(object):
     def __init__(self, filename, test=False, debug=None):
@@ -1270,7 +1280,8 @@ def plot_graphs(graphs,grids_calibr):
     for graph in graphs:
         if 'label' in graph and graph['label'] != '':
             labeltext = graph['label']
-            labeltext = labeltext.replace(' ','\ ').replace('%','\%').replace('±','\pm')
+            for old, new in latex_replace:
+                labeltext = labeltext.replace(old,new)
         else:
             labeltext = 'no\ label'
         line = plt.plot(graph['values'][0],
@@ -1281,10 +1292,14 @@ def plot_graphs(graphs,grids_calibr):
             plt.setp(line, dashes=[2,2])
     #plt.title('title')
     if 'name' in grids_calibr[0]:
-        xlabel = grids_calibr[0]['name'].replace(' ','\ ').replace('%','\%')
+        xlabel = grids_calibr[0]['name']
+        for old, new in latex_replace:
+            xlabel = xlabel.replace(old,new)
         plt.xlabel(r'$'+xlabel+'$')
     if 'name' in grids_calibr[1]:
-        ylabel = grids_calibr[1]['name'].replace(' ','\ ').replace('%','\%')
+        ylabel = grids_calibr[1]['name']
+        for old, new in latex_replace:
+            ylabel = ylabel.replace(old,new)
         plt.ylabel(r'$'+ylabel+'$')
     plt.xscale(grids_calibr[0]['type'])
     plt.yscale(grids_calibr[1]['type'])
