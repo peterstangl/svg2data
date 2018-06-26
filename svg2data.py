@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from matplotlib import rcParams
 from matplotlib.afm import AFM
 import os.path
+from math import sin, cos, tan, pi
 afm_dir = os.path.join(rcParams['datapath'],'fonts', 'afm')
 afm_dict = {}
 for afm_file in os.listdir(afm_dir):
@@ -144,21 +145,40 @@ class svg2data(object):
 def transform2matrix(string):
     if 'matrix' in string:
         matrix_string = '['+string[7:-1]+']'
+        matrix = ast.literal_eval(matrix_string)
+    elif 'translate' in string:
+        translate_string = '['+string[10:-1]+']'
+        translate = ast.literal_eval(translate_string)
+        tx = translate[0]
+        ty = translate[1] if len(translate) == 2 else 0
+        matrix = [1,0,0,1,tx,ty]
     elif 'scale' in string:
         scale_string = '['+string[6:-1]+']'
         scale = ast.literal_eval(scale_string)
-        matrix_string = '('+str(scale[0])+',0,0,'+str(scale[1])+',0,0)'
-    elif 'translate' in string:
-        trans_string = '['+string[10:-1]+']'
-        trans = ast.literal_eval(trans_string)
-        matrix_string = '(1,0,0,1,'+str(trans[0])+','+str(trans[1])+')'
+        sx = scale[0]
+        sy = scale[1] if len(scale) == 2 else sx
+        matrix = [sx,0,0,sy,0,0]
+    elif 'rotate' in string:
+        rotate_string = '['+string[7:-1]+']'
+        rotate = ast.literal_eval(rotate_string)
+        cos_a = cos(rotate[0]/180*pi)
+        sin_a = sin(rotate[0]/180*pi)
+        cx = rotate[1] if len(rotate) == 3 else 0
+        cy = rotate[2] if len(rotate) == 3 else 0
+        matrix = [cos_a,sin_a,-sin_a,cos_a,cx*(1-cos_a)+cy*sin_a,cy*(1-cos_a)-cx*sin_a]
+    elif 'skew' in string:
+        skew = float(string[6:-1])
+        tan_a = tan(skew/180*pi)
+        if string[4] == 'X':
+            matrix = [1,0,tan_a,1,0,0]
+        elif string[4] == 'Y':
+            matrix = [1,tan_a,0,1,0,0]
     else:
         print(string)
-        raise Exception('Not matrix or scale or translate!')
-
-    matrix = np.array(ast.literal_eval(matrix_string)).reshape((3,2)).transpose()
-    matrix = np.concatenate((matrix,np.array([[ 0.,  0.,  1.]])), axis=0)
-    return matrix
+        raise Exception('Wrong transform command!')
+    matrix3x2 = np.array(matrix).reshape((3,2)).transpose()
+    matrix3x3 = np.concatenate((matrix3x2,np.array([[ 0.,  0.,  1.]])), axis=0)
+    return matrix3x3
 
 def matrix2transform(matrix):
     return ('matrix('
