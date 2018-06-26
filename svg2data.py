@@ -360,9 +360,11 @@ def lines_and_curves_to_path(lines,curves): # SsQqTtAa is ignored
     return line_string
 
 def transform_path(path, matrix):
-    points = np.concatenate((path,np.ones((path.shape[0],1))), axis=1)
-    new_points = np.einsum('kj,ij',points,matrix).transpose()
-    return new_points[:,0:2]
+    shape0,shape1 = path.shape
+    points = np.empty((shape0,shape1+1))
+    points[:,:-1] = path
+    points[:,-1] = 1
+    return np.dot(points,matrix.T)[:,:2]
 
 def style2dict(style):
     style = '{\''+style.replace(':','\':\'').replace(';','\',\'').replace('\'\'','\'')+'\'}'
