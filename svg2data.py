@@ -704,17 +704,26 @@ def get_axes(lines,width,height):
     deleted_axes = []
     for i in range(2):
         axes_type = axes_positions[i]
-        for axes_type_pos in axes_type:
+        for k in range(2):
+            axes_type_pos = axes_type[k]
             if len(axes_type_pos)>1:
-                min_tot = np.array([width,height])
-                max_tot = np.array([0.,0.])
+                min_pos = 0
+                max_pos = [width,height][1-i]
                 best_id = None
                 num_grdlns = 0
+                other_pos = max_pos/2
                 for j in axes_type_pos:
-                    axis_min = axes[i][j]['min']
+                    axis_pos = axes[i][j]['min'][1-i]
                     axis_num_grdlns = len(axes[i][j]['grid'])
-                    if axis_min[1-i] < min_tot[1-i] and axis_num_grdlns >= num_grdlns:
-                        min_tot = axis_min
+                    if (axis_num_grdlns >= num_grdlns
+                    and (   (i==k
+                            and axis_pos > min_pos
+                            and axis_pos < other_pos)
+                        or  (i!=k
+                            and axis_pos < max_pos
+                            and axis_pos > other_pos))
+                    ):
+                        other_pos = axis_pos
                         num_grdlns = axis_num_grdlns
                         best_id = j
                 for j in axes_type_pos:
