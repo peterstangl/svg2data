@@ -45,8 +45,6 @@ class svg2data(object):
                 if reason == 'neg_vals' and 'transform' in child.attrib:
                     del child.attrib['transform']
                 child = pass_transformation(child)
-            if reason == 'neg_vals':
-                self._tree.write(filename)
 
             # generate line list and simplify xml
             (root,lines,curves) = get_lines_curves(root)
@@ -197,8 +195,6 @@ def matrix2transform(matrix):
 def pass_transformation(parent):
     if 'clip-path' in parent.attrib:
         del parent.attrib['clip-path']
-    if 'id' in parent.attrib:
-        del parent.attrib['id']
     if 'transform' in parent.attrib:
         parent_transform = parent.attrib['transform']
         parent_matrix = transform2matrix(parent_transform)
@@ -538,6 +534,11 @@ def get_lines_curves(root):
     curves = []
     paths = []
     for path in reversed(list(root.iter('{http://www.w3.org/2000/svg}path'))):
+        if 'id' in path.attrib:
+            path_id = path.attrib['id']
+            del path.attrib['id']
+        else:
+            path_id = None
         if 'transform' in path.attrib:
             matrix = transform2matrix(path.attrib['transform'])
             line_list = []
@@ -564,7 +565,7 @@ def get_lines_curves(root):
             for line in line_list:
                 max_values = np.amax(line, axis=0)
                 min_values = np.amin(line, axis=0)
-                line_dict = {'d':line, 'style':style2dict(style), 'max':max_values, 'min':min_values}
+                line_dict = {'d':line, 'style':style2dict(style), 'max':max_values, 'min':min_values, 'id':path_id}
                 lines.append(line_dict)
             for curve in curve_list:
                 max_values = np.amax(curve, axis=0)
