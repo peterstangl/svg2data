@@ -878,7 +878,11 @@ def connect_graphs(graphs, axes_min, axes_max):
             if (
                 graphs[i]['style'] == graphs[j]['style']
             and
-                graphs[i]['max'][0] <= graphs[j]['min'][0]+0.001
+                (
+                abs(graphs[i]['d'][-1][0]-graphs[j]['d'][0][0]) <= 0.001
+                or
+                abs(graphs[i]['d'][0][0]-graphs[j]['d'][-1][0]) <= 0.001
+                )
             and
                 i not in to_delete
             and
@@ -898,7 +902,14 @@ def connect_graphs(graphs, axes_min, axes_max):
         and
             connections[1][value['id']]['id'] == key
         ):
-            graphs[value['id']]['d'] = np.concatenate((graphs[key]['d'], graphs[value['id']]['d']))
+            if (
+                abs(graphs[value['id']]['d'][-1][0] - graphs[key]['d'][0][0])
+                <
+                abs(graphs[value['id']]['d'][0][0] - graphs[key]['d'][-1][0])
+            ):
+                graphs[value['id']]['d'] =  np.concatenate((graphs[value['id']]['d'],graphs[key]['d']))
+            else:
+                graphs[value['id']]['d'] =  np.concatenate((graphs[key]['d'],graphs[value['id']]['d']))
             graphs[value['id']]['max'][1] = max(graphs[value['id']]['max'][1], graphs[key]['max'][1])
             graphs[value['id']]['min'][0] = graphs[key]['min'][0]
             graphs[value['id']]['min'][1] = min(graphs[value['id']]['min'][1], graphs[key]['min'][1])
