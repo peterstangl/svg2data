@@ -7,6 +7,7 @@ from matplotlib import rcParams
 from matplotlib.afm import AFM
 import os.path
 from math import sin, cos, tan, pi
+from copy import copy
 afm_dir = os.path.join(rcParams['datapath'],'fonts', 'afm')
 afm_dict = {}
 for afm_file in os.listdir(afm_dir):
@@ -58,6 +59,7 @@ class svg2data(object):
                         raise Exception('Not able to repair damaged SVG file!')
                     break
 
+        self._size = np.array([width,height])
         # generate phrases and simplify xml
         (root,chars) = get_chars(root)
         phrases = chars2phrases(chars)
@@ -143,6 +145,10 @@ class svg2data(object):
         and debug != 'connect_graphs'):
             self.grids = grids
         self.graphs = graphs
+        self._curves = calibrate_graphs(curves,grids)
+        self._lines = calibrate_graphs(lines,grids)
+        self._points = get_points(curves+lines, self._size)
+        self._contours = get_contours(graphs, areas, self._size)
 
     def writesvg(self,filename):
         self._tree.write(filename)
@@ -839,6 +845,24 @@ def get_bullets(curves,phrases):
                     bullet_lines[color] = []
                 bullet_lines[color].append(curve)
     return (bullet_lines,bullet_labels)
+
+def get_contours(graphs, areas, size):
+    contours = copy(graphs)
+    for area in areas:
+        if (all( (area['max']-area['min']) > size/20)
+        and ({area['max'][0], area['min'][0]} != set(area['d'][:,0])
+            or {area['max'][1], area['min'][1]} != set(area['d'][:,1]))
+        ):
+            contours.append(area)
+    return contours
+
+def get_points(paths, size):
+    points = [path for path in paths
+              if (all(path['d'][0] == path['d'][-1])
+              and all( (path['max']-path['min']) < size/20) )]
+    for point in points:
+        point['value'] = np.mean(point['values'][:,0:-1],axis=1)
+    return points
 
 def connect_graphs(graphs, axes_min, axes_max):
     to_delete = []
