@@ -148,7 +148,7 @@ class svg2data(object):
         if 'grids' in locals():
             curves = calibrate_graphs(curves,grids)
             lines = calibrate_graphs(lines,grids)
-            self._points = get_points(curves+lines, self._size)
+            self._markers = get_markers(curves+lines, self._size)
             self._contours, self._boundary = get_contours(graphs, areas, self._size)
         self._curves = curves
         self._lines = lines
@@ -878,13 +878,13 @@ def get_contours(graphs, areas, size):
     boundary['size_values'] = boundary['max_values']-boundary['min_values']
     return contours, boundary
 
-def get_points(paths, size):
-    points = [path for path in paths
+def get_markers(paths, size):
+    markers = [path for path in paths
               if (all(path['d'][0] == path['d'][-1])
               and all( (path['max']-path['min']) < size/20) )]
-    for point in points:
-        point['value'] = np.mean(point['values'][:,0:-1],axis=1)
-    return points
+    for marker in markers:
+        marker['value'] = np.mean(marker['values'][:,0:-1],axis=1)
+    return markers
 
 def connect_graphs(graphs, axes_min, axes_max):
     to_delete = []
@@ -1455,7 +1455,7 @@ def sort_contours(contours, boundary):
             break
     return sorted_contours
 
-def plot_contours_points(plt, contours, points):
+def plot_contours_markers(plt, contours, markers):
     for contour in contours:
         col = contour['style']['stroke']
         if col == 'none':
@@ -1469,9 +1469,9 @@ def plot_contours_points(plt, contours, points):
                 ls = 'solid'
             plt.plot(*contour['values'], c=col, ls=ls)
 
-    for point in points:
-        col = point['style']['fill']
+    for marker in markers:
+        col = marker['style']['fill']
         if col == 'none':
-            col = point['style']['stroke']
-        plt.plot(*point['value'], 'o', c=col)
+            col = marker['style']['stroke']
+        plt.plot(*marker['value'], 'o', c=col)
     return plt
