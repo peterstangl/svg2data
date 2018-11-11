@@ -6,8 +6,8 @@ import matplotlib.pyplot as plt
 from matplotlib import rcParams
 from matplotlib.afm import AFM
 import os.path
-from math import sin, cos, tan, pi
-from copy import copy
+from math import sin, cos, tan, pi, sqrt
+from copy import copy, deepcopy
 afm_dir = os.path.join(rcParams['datapath'],'fonts', 'afm')
 afm_dict = {}
 for afm_file in os.listdir(afm_dir):
@@ -864,14 +864,6 @@ def get_contours(graphs, areas, size):
         contour['max_values'] = max_vals
         contour['min_values'] = min_vals
         contour['size_values'] = max_vals-min_vals
-        bounding_box = np.array([
-            max_vals,
-            [max_vals[0],min_vals[1]],
-            min_vals,
-            [min_vals[0],max_vals[1]],
-            max_vals,
-        ]).T
-        contour['bounding_box'] = bounding_box
         if boundary is None:
             boundary = {'max_values':max_vals, 'min_values':min_vals}
         else:
@@ -1378,3 +1370,87 @@ def plot_graphs(graphs,grids_calibr):
     plt.rcParams['legend.loc'] = 'best'
     plt.legend();
     plt.show()
+
+
+# Some functions to sort contour lines
+# Assumptions:
+# - there is only a single extremum
+# - the smallest contour around the extremum is either closed or has two ends
+#   that both end on the same side of the box bounding all contour lines
+def _touches_different_sides(contour, boundary):
+    touches_max_boundary = (
+        abs(contour['max_values'] - boundary['max_values']) < 1e-15
+    )
+    touches_min_boundary = (
+        abs(contour['min_values'] - boundary['min_values']) < 1e-15
+    )
+    touches_different_sides = (
+            (   all(touches_max_boundary)
+            or  all(touches_min_boundary)
+            or  (    any(touches_max_boundary)
+                and any(touches_min_boundary)))
+    )
+    return touches_different_sides
+
+def get_smallest_contour(contours, boundary):
+    smallest_contour = boundary
+    for contour in contours:
+        touches_different_sides = _touches_different_sides(contour, boundary)
+
+        if (all(contour['size_values'] <= smallest_contour['size_values'])
+        and not touches_different_sides):
+            smallest_contour = contour
+    remaining_contours = []
+    for contour in contours:
+        if contour is smallest_contour:
+            continue
+        else:
+            remaining_contours.append(contour)
+
+    return smallest_contour, remaining_contours
+
+def get_next_contour(start_contour, remaining_contours):
+    next_contours = []
+    for start_value in start_contour['values'].T:
+        smallest_distance = np.inf
+        next_contour = None
+        for contour in remaining_contours:
+            for value in contour['values'].T:
+                distance = sqrt(np.sum((start_value-value)**2))
+                if distance < smallest_distance:
+                    next_contour = contour
+                    smallest_distance = distance
+        for other_next_contour in next_contours:
+            if other_next_contour is next_contour:
+                break
+        else:
+            next_contours.append(next_contour)
+    new_remaining_contours = []
+    for contour in remaining_contours:
+        for next_contour in next_contours:
+            if contour is next_contour:
+                break
+        else:
+            new_remaining_contours.append(contour)
+    next_contour = merge_contours(next_contours)
+    return next_contour, new_remaining_contours
+
+def merge_contours(contours):
+    contour = contours[0]
+    for add_contour in contours[1:]:
+        contour['values'] = np.concatenate(
+            (contour['values'], add_contour['values']), axis=1)
+        contour['d'] = np.concatenate(
+            (contour['d'], add_contour['d']), axis=0)
+    return contour
+
+def sort_contours(contours, boundary):
+    contours = deepcopy(contours)
+    next_contour = get_smallest_contour(contours, boundary)
+    sorted_contours = [next_contour[0]]
+    for _ in range(len(contours)):
+        next_contour = get_next_contour(*next_contour)
+        sorted_contours.append(next_contour[0])
+        if len(next_contour[1]) == 0:
+            break
+    return sorted_contours
