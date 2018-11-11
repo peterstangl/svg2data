@@ -145,10 +145,13 @@ class svg2data(object):
         and debug != 'connect_graphs'):
             self.grids = grids
         self.graphs = graphs
-        self._curves = calibrate_graphs(curves,grids)
-        self._lines = calibrate_graphs(lines,grids)
-        self._points = get_points(curves+lines, self._size)
-        self._contours = get_contours(graphs, areas, self._size)
+        if 'grids' in locals():
+            curves = calibrate_graphs(curves,grids)
+            lines = calibrate_graphs(lines,grids)
+            self._points = get_points(curves+lines, self._size)
+            self._contours, self._boundary = get_contours(graphs, areas, self._size)
+        self._curves = curves
+        self._lines = lines
 
     def writesvg(self,filename):
         self._tree.write(filename)
@@ -854,7 +857,34 @@ def get_contours(graphs, areas, size):
             or {area['max'][1], area['min'][1]} != set(area['d'][:,1]))
         ):
             contours.append(area)
-    return contours
+    boundary = None
+    for contour in contours:
+        max_vals = np.max(contour['values'],axis=1)
+        min_vals = np.min(contour['values'],axis=1)
+        contour['max_values'] = max_vals
+        contour['min_values'] = min_vals
+        contour['size_values'] = max_vals-min_vals
+        bounding_box = np.array([
+            max_vals,
+            [max_vals[0],min_vals[1]],
+            min_vals,
+            [min_vals[0],max_vals[1]],
+            max_vals,
+        ]).T
+        contour['bounding_box'] = bounding_box
+        if boundary is None:
+            boundary = {'max_values':max_vals, 'min_values':min_vals}
+        else:
+            if max_vals[0] > boundary['max_values'][0]:
+                boundary['max_values'][0] = max_vals[0]
+            if max_vals[1] > boundary['max_values'][1]:
+                boundary['max_values'][1] = max_vals[1]
+            if min_vals[0] < boundary['min_values'][0]:
+                boundary['min_values'][0] = min_vals[0]
+            if min_vals[1] < boundary['min_values'][1]:
+                boundary['min_values'][1] = min_vals[1]
+    boundary['size_values'] = boundary['max_values']-boundary['min_values']
+    return contours, boundary
 
 def get_points(paths, size):
     points = [path for path in paths
