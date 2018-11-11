@@ -1454,3 +1454,24 @@ def sort_contours(contours, boundary):
         if len(next_contour[1]) == 0:
             break
     return sorted_contours
+
+def plot_contours_points(plt, contours, points):
+    for contour in contours:
+        col = contour['style']['stroke']
+        if col == 'none':
+            col = contour['style']['fill']
+            alpha = contour['style']['fill-opacity']
+            plt.fill(*contour['values'], alpha=float(alpha), c=col)
+        else:
+            if contour['style']['stroke-dasharray'] != 'none':
+                ls = (0,tuple(float(num)*.6 for num in contour['style']['stroke-dasharray'].split(',')))
+            else:
+                ls = 'solid'
+            plt.plot(*contour['values'], c=col, ls=ls)
+
+    for point in points:
+        col = point['style']['fill']
+        if col == 'none':
+            col = point['style']['stroke']
+        plt.plot(*point['value'], 'o', c=col)
+    return plt
