@@ -1475,3 +1475,15 @@ def plot_contours_markers(plt, contours, markers):
             col = marker['style']['stroke']
         plt.plot(*marker['value'], 'o', c=col)
     return plt
+
+def split_by_color(paths):
+    color_dict = {}
+    for path in paths:
+        col = path['style']['stroke']
+        if col == 'none':
+            col = path['style']['fill']
+        if col not in color_dict:
+            color_dict[col] = [path]
+        else:
+            color_dict[col].append(path)
+    return color_dict
