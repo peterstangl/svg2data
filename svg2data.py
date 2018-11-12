@@ -8,7 +8,7 @@ from matplotlib.afm import AFM
 import os.path
 from math import sin, cos, tan, pi, sqrt
 from copy import copy, deepcopy
-import scipy.interpolate as interpolate
+import scipy
 afm_dir = os.path.join(rcParams['datapath'],'fonts', 'afm')
 afm_dict = {}
 for afm_file in os.listdir(afm_dir):
@@ -1484,7 +1484,11 @@ def split_by_color(paths):
             color_dict[col].append(path)
     return color_dict
 
-def get_griddata(central_marker, contours, value_list, x_num, y_num, fill_value=np.nan):
+def get_griddata(central_marker, contours, value_list=None, x_num=50, y_num=50, fill_value=np.nan):
+    if value_list is None:
+        n_sigmas = len(contours)+1
+        delta_chi2 = np.array([delta_chi2(i,2) for i in range(n_sigmas)])
+        value_list = delta_chi2/(-2)
     points = np.array([central_marker['value']]).T
     values = [value_list[0]]
     for i, contour in enumerate(contours):
@@ -1496,6 +1500,28 @@ def get_griddata(central_marker, contours, value_list, x_num, y_num, fill_value=
     min_x, min_y = boundary['min_values']
     max_x, max_y = boundary['max_values']
     grid = tuple(np.mgrid[min_x:max_x:x_num*1j,min_y:max_y:y_num*1j])
-    griddata = interpolate.griddata(points, values, grid, method='cubic', rescale=True, fill_value=fill_value)
+    griddata = scipy.interpolate.griddata(points, values, grid, method='cubic', rescale=True, fill_value=fill_value)
     extent=(grid[0][0][0], grid[0][-1][0], grid[1][0][0], grid[1][0][-1])
     return griddata, extent
+
+# copied from flavio: https://github.com/flav-io/flavio
+def confidence_level(nsigma):
+    r"""Return the confidence level corresponding to a number of sigmas,
+    i.e. the probability contained in the normal distribution between $-n\sigma$
+    and $+n\sigma$.
+
+    Example: `confidence_level(1)` returns approximately 0.68."""
+    return (scipy.stats.norm.cdf(nsigma)-0.5)*2
+
+# copied from flavio: https://github.com/flav-io/flavio
+def delta_chi2(nsigma, dof):
+    r"""Compute the $\Delta\chi^2$ for `dof` degrees of freedom corresponding
+    to `nsigma` Gaussian standard deviations.
+
+    Example: For `dof=2` and `nsigma=1`, the result is roughly 2.3."""
+    if dof == 1:
+        # that's trivial
+        return nsigma**2
+    chi2_ndof = scipy.stats.chi2(dof)
+    cl_nsigma = confidence_level(nsigma)
+    return chi2_ndof.ppf(cl_nsigma)
