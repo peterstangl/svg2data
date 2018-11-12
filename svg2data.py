@@ -8,6 +8,7 @@ from matplotlib.afm import AFM
 import os.path
 from math import sin, cos, tan, pi, sqrt
 from copy import copy, deepcopy
+import scipy.interpolate as interpolate
 afm_dir = os.path.join(rcParams['datapath'],'fonts', 'afm')
 afm_dict = {}
 for afm_file in os.listdir(afm_dir):
@@ -857,25 +858,13 @@ def get_contours(graphs, areas, size):
             or {area['max'][1], area['min'][1]} != set(area['d'][:,1]))
         ):
             contours.append(area)
-    boundary = None
     for contour in contours:
         max_vals = np.max(contour['values'],axis=1)
         min_vals = np.min(contour['values'],axis=1)
         contour['max_values'] = max_vals
         contour['min_values'] = min_vals
         contour['size_values'] = max_vals-min_vals
-        if boundary is None:
-            boundary = {'max_values':max_vals, 'min_values':min_vals}
-        else:
-            if max_vals[0] > boundary['max_values'][0]:
-                boundary['max_values'][0] = max_vals[0]
-            if max_vals[1] > boundary['max_values'][1]:
-                boundary['max_values'][1] = max_vals[1]
-            if min_vals[0] < boundary['min_values'][0]:
-                boundary['min_values'][0] = min_vals[0]
-            if min_vals[1] < boundary['min_values'][1]:
-                boundary['min_values'][1] = min_vals[1]
-    boundary['size_values'] = boundary['max_values']-boundary['min_values']
+    boundary = get_boundary(contours)
     return contours, boundary
 
 def get_markers(paths, size):
@@ -1377,6 +1366,7 @@ def plot_graphs(graphs,grids_calibr):
 # - there is only a single extremum
 # - the smallest contour around the extremum is either closed or has two ends
 #   that both end on the same side of the box bounding all contour lines
+
 def _touches_different_sides(contour, boundary):
     touches_max_boundary = (
         abs(contour['max_values'] - boundary['max_values']) < 1e-15
@@ -1444,6 +1434,25 @@ def merge_contours(contours):
             (contour['d'], add_contour['d']), axis=0)
     return contour
 
+def get_boundary(contours):
+    boundary = None
+    for contour in contours:
+        max_vals = contour['max_values']
+        min_vals = contour['min_values']
+        if boundary is None:
+            boundary = {'max_values':max_vals, 'min_values':min_vals}
+        else:
+            if max_vals[0] > boundary['max_values'][0]:
+                boundary['max_values'][0] = max_vals[0]
+            if max_vals[1] > boundary['max_values'][1]:
+                boundary['max_values'][1] = max_vals[1]
+            if min_vals[0] < boundary['min_values'][0]:
+                boundary['min_values'][0] = min_vals[0]
+            if min_vals[1] < boundary['min_values'][1]:
+                boundary['min_values'][1] = min_vals[1]
+    boundary['size_values'] = boundary['max_values']-boundary['min_values']
+    return boundary
+
 def sort_contours(contours, boundary):
     contours = deepcopy(contours)
     next_contour = get_smallest_contour(contours, boundary)
@@ -1487,3 +1496,19 @@ def split_by_color(paths):
         else:
             color_dict[col].append(path)
     return color_dict
+
+def get_griddata(central_marker, contours, value_list, x_num, y_num, fill_value=np.nan):
+    points = np.array([central_marker['value']]).T
+    values = [value_list[0]]
+    for i, contour in enumerate(contours):
+        points = np.concatenate((points, contour['values']), axis=1)
+        values += [value_list[i+1]]*contour['values'].shape[1]
+    points = points.T
+    values = np.array(values)
+    boundary = get_boundary(contours)
+    min_x, min_y = boundary['min_values']
+    max_x, max_y = boundary['max_values']
+    grid = tuple(np.mgrid[min_x:max_x:x_num*1j,min_y:max_y:y_num*1j])
+    griddata = interpolate.griddata(points, values, grid, method='cubic', rescale=True, fill_value=fill_value)
+    extent=(grid[0][0][0], grid[0][-1][0], grid[1][0][0], grid[1][0][-1])
+    return griddata, extent
