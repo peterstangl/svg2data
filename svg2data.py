@@ -150,7 +150,7 @@ class svg2data(object):
             curves = calibrate_graphs(curves,grids)
             lines = calibrate_graphs(lines,grids)
             self._markers = get_markers(curves+lines, self._size)
-            self._contours, self._boundary = get_contours(graphs, areas, self._size)
+            self._contours = get_contours(graphs, areas, self._size)
         self._curves = curves
         self._lines = lines
 
@@ -864,8 +864,7 @@ def get_contours(graphs, areas, size):
         contour['max_values'] = max_vals
         contour['min_values'] = min_vals
         contour['size_values'] = max_vals-min_vals
-    boundary = get_boundary(contours)
-    return contours, boundary
+    return contours
 
 def get_markers(paths, size):
     markers = [path for path in paths
@@ -1367,28 +1366,15 @@ def plot_graphs(graphs,grids_calibr):
 # - the smallest contour around the extremum is either closed or has two ends
 #   that both end on the same side of the box bounding all contour lines
 
-def _touches_different_sides(contour, boundary):
-    touches_max_boundary = (
-        abs(contour['max_values'] - boundary['max_values']) < 1e-15
-    )
-    touches_min_boundary = (
-        abs(contour['min_values'] - boundary['min_values']) < 1e-15
-    )
-    touches_different_sides = (
-            (   all(touches_max_boundary)
-            or  all(touches_min_boundary)
-            or  (    any(touches_max_boundary)
-                and any(touches_min_boundary)))
-    )
-    return touches_different_sides
-
 def get_smallest_contour(contours, boundary):
     smallest_contour = boundary
     for contour in contours:
-        touches_different_sides = _touches_different_sides(contour, boundary)
-
+        closed_or_ends_on_same_side = any(
+            abs(contour['values'].T[0] - contour['values'].T[-1]) < 0.02
+        )
         if (all(contour['size_values'] <= smallest_contour['size_values'])
-        and not touches_different_sides):
+        and closed_or_ends_on_same_side
+        ):
             smallest_contour = contour
     remaining_contours = []
     for contour in contours:
@@ -1453,7 +1439,8 @@ def get_boundary(contours):
     boundary['size_values'] = boundary['max_values']-boundary['min_values']
     return boundary
 
-def sort_contours(contours, boundary):
+def sort_contours(contours):
+    boundary = get_boundary(contours)
     contours = deepcopy(contours)
     next_contour = get_smallest_contour(contours, boundary)
     sorted_contours = [next_contour[0]]
