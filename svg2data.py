@@ -3,13 +3,13 @@ import ast
 import xml.etree.ElementTree as ET
 from operator import itemgetter
 import matplotlib.pyplot as plt
-from matplotlib import rcParams
+from matplotlib import rcParams, get_data_path
 from matplotlib.afm import AFM
 import os.path
 from math import sin, cos, tan, pi, sqrt
 from copy import copy, deepcopy
 import scipy
-afm_dir = os.path.join(rcParams['datapath'],'fonts', 'afm')
+afm_dir = os.path.join(get_data_path(),'fonts', 'afm')
 afm_dict = {}
 for afm_file in os.listdir(afm_dir):
     afm_fname = os.path.join(afm_dir,afm_file)
