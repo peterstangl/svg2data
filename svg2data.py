@@ -66,6 +66,7 @@ class svg2data(object):
         phrases = chars2phrases(chars)
 
         # get axes, plot size and lines to delete
+        all_lines = deepcopy(lines)
         if debug != 'get_axes':
             (axes, axes_min, axes_max, lines) = get_axes(lines,width,height)
         elif debug == 'get_axes':
@@ -149,10 +150,12 @@ class svg2data(object):
         if 'grids' in locals():
             curves = calibrate_graphs(curves,grids)
             lines = calibrate_graphs(lines,grids)
+            all_lines = calibrate_graphs(all_lines,grids)
             self._markers = get_markers(curves+lines, self._size)
             self._contours = get_contours(graphs, areas, self._size)
         self._curves = curves
         self._lines = lines
+        self._all_lines = all_lines
 
     def writesvg(self,filename):
         self._tree.write(filename)
