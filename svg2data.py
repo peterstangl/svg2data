@@ -1421,6 +1421,11 @@ def merge_contours(contours):
             (contour['values'], add_contour['values']), axis=1)
         contour['d'] = np.concatenate(
             (contour['d'], add_contour['d']), axis=0)
+    max_vals = np.max(contour['values'],axis=1)
+    min_vals = np.min(contour['values'],axis=1)
+    contour['max_values'] = max_vals
+    contour['min_values'] = min_vals
+    contour['size_values'] = max_vals-min_vals
     return contour
 
 def get_boundary(contours):
